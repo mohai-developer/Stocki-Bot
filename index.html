@@ -228,10 +228,24 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
           <div class="toggle-btn active" onclick="setReport('full',this)" id="btnFull">Full Report</div>
           <div class="toggle-btn" onclick="setReport('summary',this)" id="btnSummary">Summary Only</div>
         </div>
-        <button class="btn-analyze" onclick="sendAnalysis()" id="btnAnalyze">Analyze — Send to Telegram</button>
+        <button class="btn-analyze" onclick="sendAnalysis()" id="btnAnalyze">تحليل</button>
       </div>
+
+      <div id="analysisResult" style="display:none;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:1.25rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+          <div style="font-size:14px;font-weight:600;color:#58a6ff" id="resultTitle">تحليل</div>
+          <div style="font-size:11px;color:#8b949e" id="resultTime"></div>
+        </div>
+        <div id="resultLoading" style="text-align:center;padding:2rem;color:#8b949e;display:none">
+          <div style="font-size:24px;margin-bottom:0.5rem">⏳</div>
+          <div style="font-size:13px">جاري التحليل...</div>
+        </div>
+        <div id="resultContent" style="font-size:13px;color:#e6edf3;line-height:1.8;white-space:pre-wrap"></div>
+      </div>
+
     </div>
   </div>
+</div>
 
   <!-- ALERTS -->
   <div class="page" id="pageAlerts">
@@ -715,7 +729,19 @@ function sendAnalysis(){
 
   if(!sym){ showToast(t('enterSymbol')); return; }
 
-  showToast(t('sending'));
+  var resultDiv = document.getElementById('analysisResult');
+  var loadingDiv = document.getElementById('resultLoading');
+  var contentDiv = document.getElementById('resultContent');
+  var titleDiv = document.getElementById('resultTitle');
+  var timeDiv = document.getElementById('resultTime');
+
+  resultDiv.style.display = 'block';
+  loadingDiv.style.display = 'block';
+  contentDiv.textContent = '';
+  titleDiv.textContent = '📊 ' + sym;
+  timeDiv.textContent = new Date().toLocaleTimeString();
+
+  document.getElementById('pageAnalyze').scrollTop = 0;
 
   fetch(API_URL + '/analyze', {
     method: 'POST',
@@ -725,20 +751,22 @@ function sendAnalysis(){
       report_type: reportType,
       entry: entry,
       target: target,
-      stop: stop,
-      chat_id: currentUser ? currentUser.telegramId || '' : ''
+      stop: stop
     })
   })
   .then(function(res){ return res.json(); })
   .then(function(data){
+    loadingDiv.style.display = 'none';
     if(data.status === 'success'){
-      showToast('✅ ' + sym + ' — ' + (lang==='ar' ? 'تم الإرسال لتيليجرام' : 'Sent to Telegram'));
+      contentDiv.textContent = data.analysis;
+      showToast('✅ ' + sym);
     } else {
-      showToast('❌ ' + (data.error || 'Error'));
+      contentDiv.textContent = '❌ ' + (data.error || 'Error');
     }
   })
   .catch(function(err){
-    showToast('❌ Connection error');
+    loadingDiv.style.display = 'none';
+    contentDiv.textContent = '❌ Connection error';
     console.error(err);
   });
 }
