@@ -123,9 +123,8 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
 <div class="toast" id="toast"></div>
 
 <div class="topbar">
-  <div class="logo">
-    <div class="logo-name">Stocki Bot</div>
-    <div class="logo-sub">POWERED BY AI</div>
+  <div class="logo" style="display:flex;flex-direction:row;align-items:center">
+    <img src="logo.png" style="width:32px;height:32px;object-fit:contain;margin-right:8px" alt="logo"><div><div class="logo-name">Stocki Bot</div><div class="logo-sub">POWERED BY AI</div></div>
   </div>
   <div class="lang-toggle">
     <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
@@ -136,7 +135,7 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
 <!-- LOGIN -->
 <div class="login-wrap" id="loginWrap">
   <div class="login-card">
-    <div class="login-logo">📈</div>
+    <div class="login-logo"><img src="logo.png" style="width:120px;height:120px;object-fit:contain" alt="Stocki Bot"></div>
     <div class="login-title">Stocki Bot</div>
     <div class="login-powered" id="loginPowered">AI-Powered Stock Analysis</div>
     <label class="field-label" id="loginLabel">Access Code</label>
