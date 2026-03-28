@@ -159,6 +159,10 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
     <label class="field-label" id="loginLabel">Access Code</label>
     <input class="field-input" id="codeInput" type="password" placeholder="••••••••••" maxlength="12" />
     <button class="btn-primary" onclick="login()" id="loginBtn">Sign In</button>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+      <input type="checkbox" id="rememberMe" style="width:16px;height:16px;cursor:pointer">
+      <label for="rememberMe" style="font-size:12px;color:#8b949e;cursor:pointer" id="rememberLabel">تذكرني</label>
+    </div>
     <div class="error-msg" id="errorMsg">Invalid access code</div>
     <div class="disclaimer" id="disclaimer">
       This tool is for informational purposes only and does not constitute investment advice. Trading involves risk, and all investment decisions are solely the user's responsibility.
@@ -501,6 +505,12 @@ function generateCode(){
 }
 
 function login(){
+  var remember = document.getElementById('rememberMe');
+  if(remember && remember.checked){
+    localStorage.setItem('stocki_code', document.getElementById('codeInput').value.trim());
+  } else {
+    localStorage.removeItem('stocki_code');
+  }
   var code=document.getElementById('codeInput').value.trim();
   var found=users.find(function(u){return u.code===code});
   if(found){
@@ -720,14 +730,22 @@ function removeAlert(i){
 }
 
 var API_URL = 'https://web-production-21f3b.up.railway.app';
+var analysisType = 'general';
+
+function setAnalysisType(type, el) {
+  analysisType = type;
+  document.getElementById('btnGeneral').style.opacity = type === 'general' ? '1' : '0.5';
+  document.getElementById('btnPosition').style.opacity = type === 'position' ? '1' : '0.5';
+  document.getElementById('generalOptions').style.display = type === 'general' ? 'block' : 'none';
+  document.getElementById('positionOptions').style.display = type === 'position' ? 'block' : 'none';
+}
 
 function sendAnalysis(){
   var sym = document.getElementById('analyzeSymbol').value.trim().toUpperCase();
-  var entry = document.getElementById('analyzeEntry').value;
-  var target = document.getElementById('analyzeTarget').value;
-  var stop = document.getElementById('analyzeStop').value;
+  var entryPrice = document.getElementById('entryPrice') ? document.getElementById('entryPrice').value : '';
 
   if(!sym){ showToast(t('enterSymbol')); return; }
+  if(analysisType === 'position' && !entryPrice){ showToast('أدخل سعر الدخول'); return; }
 
   var resultDiv = document.getElementById('analysisResult');
   var loadingDiv = document.getElementById('resultLoading');
@@ -738,20 +756,17 @@ function sendAnalysis(){
   resultDiv.style.display = 'block';
   loadingDiv.style.display = 'block';
   contentDiv.textContent = '';
-  titleDiv.textContent = '📊 ' + sym;
+  titleDiv.textContent = (analysisType === 'position' ? '💼 ' : '📊 ') + sym;
   timeDiv.textContent = new Date().toLocaleTimeString();
-
-  document.getElementById('pageAnalyze').scrollTop = 0;
 
   fetch(API_URL + '/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       symbol: sym,
+      analysis_type: analysisType,
       report_type: reportType,
-      entry: entry,
-      target: target,
-      stop: stop
+      entry_price: entryPrice
     })
   })
   .then(function(res){ return res.json(); })
@@ -783,6 +798,11 @@ document.getElementById('codeInput').addEventListener('keypress',function(e){
 });
 
 generateCode();
+var savedCode = localStorage.getItem('stocki_code');
+if(savedCode){
+  document.getElementById('codeInput').value = savedCode;
+  document.getElementById('rememberMe').checked = true;
+}
 window.addEventListener('DOMContentLoaded', function() {
   applyTranslations();
   renderAll();
