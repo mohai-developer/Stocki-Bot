@@ -286,6 +286,53 @@ def analyze():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/dashboard", methods=["POST"])
+def dashboard():
+    try:
+        body = request.json
+        symbols = body.get("symbols", [])
+        results = []
+        for symbol in symbols:
+            try:
+                data = get_latest_data(symbol)
+                if not data:
+                    continue
+                rsi = data.get("rsi", 50)
+                macd_cross = data.get("macd_cross", "bearish")
+                volume_ratio = data.get("volume_ratio", 1)
+                change_pct = data.get("change_pct", 0)
+
+                if rsi < 40 and macd_cross == "bullish" and volume_ratio > 1.2:
+                    signal = "buy"
+                    conf = min(int(70 + (40 - rsi)), 90)
+                elif rsi > 70 and macd_cross == "bearish":
+                    signal = "exit"
+                    conf = min(int(60 + (rsi - 70)), 85)
+                else:
+                    signal = "wait"
+                    conf = 50
+
+                results.append({
+                    "symbol": symbol,
+                    "price": data.get("close", 0),
+                    "change": data.get("change_pct", 0),
+                    "signal": signal,
+                    "conf": conf,
+                    "rsi": rsi,
+                    "pre_market": data.get("pre_market", 0),
+                    "after_hours": data.get("after_hours", 0),
+                })
+            except Exception as e:
+                print(f"Dashboard error for {symbol}: {e}")
+                continue
+
+        buy_count = len([r for r in results if r["signal"] == "buy"])
+        return jsonify({"status": "success", "stocks": results, "buy_count": buy_count})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"Server running on port {port}")
