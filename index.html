@@ -202,55 +202,52 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
   <!-- ANALYZE -->
   <div class="page" id="pageAnalyze">
     <div style="padding:1rem 16px 80px">
-      <div class="dash-header">
-        <div class="dash-title" id="analyzeTitle">Analyze</div>
-      </div>
-      <div class="section-title" id="analyzeSubTitle">Stock details</div>
-      <div class="analyze-card">
-        <div class="input-row">
-          <div>
-            <label class="mini-label" id="labelSymbol">Symbol</label>
-            <input class="mini-input" id="analyzeSymbol" placeholder="e.g. TSLA" style="text-transform:uppercase" />
-          </div>
-          <div>
-            <label class="mini-label" id="labelEntry">Entry price</label>
-            <input class="mini-input" id="analyzeEntry" placeholder="0.00" type="number" />
-          </div>
+        <div class="dash-header">
+            <div class="dash-title" id="analyzeTitle">التحليل الذكي</div>
         </div>
-        <div class="input-row">
-          <div>
-            <label class="mini-label" id="labelTarget">Target</label>
-            <input class="mini-input" id="analyzeTarget" placeholder="0.00" type="number" />
-          </div>
-          <div>
-            <label class="mini-label" id="labelStop">Stop loss</label>
-            <input class="mini-input" id="analyzeStop" placeholder="0.00" type="number" />
-          </div>
-        </div>
-        <div class="section-title" id="reportTypeTitle" style="margin-bottom:8px">Report type</div>
-        <div class="report-toggle">
-          <div class="toggle-btn active" onclick="setReport('full',this)" id="btnFull">Full Report</div>
-          <div class="toggle-btn" onclick="setReport('summary',this)" id="btnSummary">Summary Only</div>
-        </div>
-        <button class="btn-analyze" onclick="sendAnalysis()" id="btnAnalyze">تحليل</button>
-      </div>
 
-      <div id="analysisResult" style="display:none;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:1.25rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
-          <div style="font-size:14px;font-weight:600;color:#58a6ff" id="resultTitle">تحليل</div>
-          <div style="font-size:11px;color:#8b949e" id="resultTime"></div>
+        <div class="report-toggle" style="margin-bottom: 15px;">
+            <div class="toggle-btn active" onclick="setAnalysisMode('general', this)" id="modeGen">تحليل عام</div>
+            <div class="toggle-btn" onclick="setAnalysisMode('position', this)" id="modePos">تحليل صفقة</div>
         </div>
-        <div id="resultLoading" style="text-align:center;padding:2rem;color:#8b949e;display:none">
-          <div style="font-size:24px;margin-bottom:0.5rem">⏳</div>
-          <div style="font-size:13px">جاري التحليل...</div>
-        </div>
-        <div id="resultContent" style="font-size:13px;color:#e6edf3;line-height:1.8;white-space:pre-wrap"></div>
-      </div>
 
+        <div class="analyze-card">
+            <div class="input-row">
+                <div style="grid-column: span 2;">
+                    <label class="mini-label">رمز السهم</label>
+                    <input class="mini-input" id="analyzeSymbol" placeholder="مثلاً: NVDA" style="text-transform:uppercase" />
+                </div>
+            </div>
+            
+            <div id="entryField" style="display:none; margin-top:10px;">
+                <label class="mini-label">سعر دخولك الحالي</label>
+                <input class="mini-input" id="analyzeEntry" placeholder="0.00" type="number" step="0.01" />
+            </div>
+
+            <div id="generalOptions" style="margin-top:10px;">
+                <label class="mini-label">حجم التقرير</label>
+                <div class="report-toggle">
+                    <div class="toggle-btn active" onclick="setReportType('full', this)">مفصل</div>
+                    <div class="toggle-btn" onclick="setReportType('summary', this)">مختصر</div>
+                </div>
+            </div>
+
+            <button class="btn-analyze" onclick="executeAnalysis()" id="btnAnalyze" style="margin-top:20px; background:#1f6feb;">تحليل السهم الآن</button>
+        </div>
+
+        <div id="analysisResult" style="display:none; background:#161b22; border:1px solid #30363d; border-radius:10px; padding:1rem; margin-top:20px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <div style="font-size:14px; font-weight:600; color:#58a6ff;">نتيجة التحليل</div>
+                <div id="resultTime" style="font-size:11px; color:#8b949e;"></div>
+            </div>
+            <div id="resultLoading" style="text-align:center; padding:1rem; display:none;">
+                <div style="font-size:20px;">⏳</div>
+                <div style="font-size:12px; color:#8b949e;">جاري المعالجة بواسطة الذكاء الاصطناعي...</div>
+            </div>
+            <div id="resultContent" style="font-size:13px; color:#e6edf3; line-height:1.7; white-space:pre-wrap;"></div>
+        </div>
     </div>
-  </div>
 </div>
-
   <!-- ALERTS -->
   <div class="page" id="pageAlerts">
     <div style="padding:1rem 16px 80px">
@@ -844,6 +841,69 @@ function installApp() {
 window.addEventListener('appinstalled', function() {
   document.getElementById('installBanner').style.display = 'none';
 });
+  // المتغيرات الأساسية
+let currentAnalysisMode = 'general';
+let currentReportType = 'full';
+
+// وظيفة التبديل بين عام وصفقة
+function setAnalysisMode(mode, el) {
+    currentAnalysisMode = mode;
+    document.querySelectorAll('#pageAnalyze > div > .report-toggle .toggle-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    
+    // إظهار وإخفاء الحقول بناءً على الاختيار
+    document.getElementById('entryField').style.display = (mode === 'position') ? 'block' : 'none';
+    document.getElementById('generalOptions').style.display = (mode === 'general') ? 'block' : 'none';
+}
+
+// وظيفة تحديد نوع التقرير
+function setReportType(type, el) {
+    currentReportType = type;
+    el.parentNode.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+}
+
+// وظيفة الإرسال للسيرفر
+async function executeAnalysis() {
+    const symbol = document.getElementById('analyzeSymbol').value.trim();
+    const entry = document.getElementById('analyzeEntry').value;
+    
+    if (!symbol) { alert("يرجى إدخال رمز السهم"); return; }
+
+    const resultBox = document.getElementById('analysisResult');
+    const loading = document.getElementById('resultLoading');
+    const content = document.getElementById('resultContent');
+
+    resultBox.style.display = 'block';
+    loading.style.display = 'block';
+    content.textContent = '';
+
+    try {
+        const response = await fetch('https://YOUR-BACKEND-URL.com/analyze', { // استبدل بالرابط الخاص بك
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                symbol: symbol,
+                analysis_type: currentAnalysisMode,
+                report_type: currentReportType,
+                entry_price: entry
+            })
+        });
+        
+        const data = await response.json();
+        loading.style.display = 'none';
+        
+        if (data.status === "success") {
+            content.textContent = data.analysis;
+            document.getElementById('resultTime').textContent = new Date().toLocaleTimeString('ar-SA');
+        } else {
+            content.textContent = "خطأ: " + (data.error || "تعذر التحليل");
+        }
+    } catch (error) {
+        loading.style.display = 'none';
+        content.textContent = "فشل الاتصال بالسيرفر، تأكد من تشغيله.";
+    }
+}
 </script>
 </body>
 </html>
