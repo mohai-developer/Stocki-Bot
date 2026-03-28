@@ -705,10 +705,42 @@ function removeAlert(i){
   renderAlerts();
 }
 
+var API_URL = 'https://web-production-21f3b.up.railway.app';
+
 function sendAnalysis(){
-  var sym=document.getElementById('analyzeSymbol').value.trim().toUpperCase();
-  if(!sym){showToast(t('enterSymbol'));return;}
+  var sym = document.getElementById('analyzeSymbol').value.trim().toUpperCase();
+  var entry = document.getElementById('analyzeEntry').value;
+  var target = document.getElementById('analyzeTarget').value;
+  var stop = document.getElementById('analyzeStop').value;
+
+  if(!sym){ showToast(t('enterSymbol')); return; }
+
   showToast(t('sending'));
+
+  fetch(API_URL + '/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      symbol: sym,
+      report_type: reportType,
+      entry: entry,
+      target: target,
+      stop: stop,
+      chat_id: currentUser ? currentUser.telegramId || '' : ''
+    })
+  })
+  .then(function(res){ return res.json(); })
+  .then(function(data){
+    if(data.status === 'success'){
+      showToast('✅ ' + sym + ' — ' + (lang==='ar' ? 'تم الإرسال لتيليجرام' : 'Sent to Telegram'));
+    } else {
+      showToast('❌ ' + (data.error || 'Error'));
+    }
+  })
+  .catch(function(err){
+    showToast('❌ Connection error');
+    console.error(err);
+  });
 }
 
 function showToast(msg){
