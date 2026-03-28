@@ -71,14 +71,63 @@ def get_geopolitical_news():
 
 def get_latest_data(symbol):
     try:
-        if not os.path.exists(DATA_FILE):
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        hist = ticker.history(period="6mo", interval="1d")
+        if len(hist) < 14:
             return None
-        df = pd.read_csv(DATA_FILE)
-        df_symbol = df[df["symbol"] == symbol].tail(5)
-        if df_symbol.empty:
-            return None
-        return df_symbol.to_dict(orient="records")
-    except:
+
+        latest = hist.iloc[-1]
+        prev = hist.iloc[-2]
+
+        delta = hist["Close"].diff()
+        gain = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
+        loss = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
+        rsi = round(100 - (100 / (1 + gain.iloc[-1] / loss.iloc[-1])), 2)
+
+        ema12 = hist["Close"].ewm(span=12).mean()
+        ema26 = hist["Close"].ewm(span=26).mean()
+        macd = round((ema12 - ema26).iloc[-1], 4)
+        signal_line = round((ema12 - ema26).ewm(span=9).mean().iloc[-1], 4)
+
+        sma20 = hist["Close"].rolling(20).mean().iloc[-1]
+        std20 = hist["Close"].rolling(20).std().iloc[-1]
+        bb_upper = round(sma20 + 2 * std20, 2)
+        bb_lower = round(sma20 - 2 * std20, 2)
+        bb_position = round(((latest["Close"] - bb_lower) / (bb_upper - bb_lower)) * 100, 1)
+
+        sma50 = round(hist["Close"].rolling(50).mean().iloc[-1], 2)
+        avg_volume = round(hist["Volume"].rolling(20).mean().iloc[-1])
+        volume_ratio = round(latest["Volume"] / avg_volume, 2)
+
+        week_ago = hist["Close"].iloc[-6] if len(hist) >= 6 else hist["Close"].iloc[0]
+        weekly_change = round(((latest["Close"] - week_ago) / week_ago) * 100, 2)
+
+        return {
+            "symbol": symbol,
+            "close": round(latest["Close"], 2),
+            "prev_close": round(prev["Close"], 2),
+            "change_pct": round(((latest["Close"] - prev["Close"]) / prev["Close"]) * 100, 2),
+            "weekly_change": weekly_change,
+            "pre_market": round(info.get("preMarketPrice", 0) or 0, 2),
+            "after_hours": round(info.get("postMarketPrice", 0) or 0, 2),
+            "rsi": rsi,
+            "macd": macd,
+            "macd_signal": signal_line,
+            "macd_cross": "bullish" if macd > signal_line else "bearish",
+            "bb_upper": bb_upper,
+            "bb_lower": bb_lower,
+            "bb_position": bb_position,
+            "sma50": sma50,
+            "volume": int(latest["Volume"]),
+            "avg_volume": int(avg_volume),
+            "volume_ratio": volume_ratio,
+            "pe_ratio": round(info.get("trailingPE", 0) or 0, 2),
+            "market_cap_b": round((info.get("marketCap", 0) or 0) / 1e9, 1),
+            "earnings_date": str(info.get("earningsTimestamp", "N/A")),
+        }
+    except Exception as e:
+        print(f"Error fetching live data for {symbol}: {e}")
         return None
 
 def analyze_general(symbol, report_type, data, stock_news, market_news, geo_news):
