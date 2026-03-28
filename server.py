@@ -81,25 +81,111 @@ def get_latest_data(symbol):
     except:
         return None
 
-def analyze_with_claude(symbol, report_type, entry, target, stop, data, stock_news, market_news, geo_news):
+def analyze_general(symbol, report_type, data, stock_news, market_news, geo_news):
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        summary_note = "أعطِ ملخصاً مختصراً: القرار، سعر الدخول، الهدف، الوقف، ومستوى الثقة فقط." if report_type == "summary" else ""
-        entry_note = f"المستخدم دخل بسعر ${entry}. هدفه ${target}. وقف الخسارة ${stop}." if entry else ""
+
+        if report_type == "summary":
+            format_instruction = """
+قدم ملخصاً مختصراً بهذا الشكل فقط:
+
+📊 الوضع: [إيجابي/سلبي/محايد]
+🎯 التوصية: [ادخل/انتظر/تجنب]
+
+إذا كانت التوصية الدخول:
+💰 سعر الدخول: $X
+🎯 الهدف: $X
+🛑 وقف الخسارة: $X
+📊 R/R: 1:X
+✅ مستوى الثقة: X%
+⚠️ أهم خطر: [جملة واحدة]
+"""
+        else:
+            format_instruction = """
+قدم تقريراً مفصلاً:
+
+1. الوضع الفني: RSI، MACD، Bollinger، الترند، حجم التداول
+2. الوضع الأساسي: القطاع، P/E، الأرباح القادمة
+3. تأثير الأخبار والأحداث الجيوسياسية
+4. إشارات Pre-Market و After-Hours
+
+5. التوصية النهائية:
+   - الوضع: إيجابي أم سلبي
+   - القرار: ادخل / انتظر / تجنب
+
+   إذا كانت التوصية الدخول:
+   💰 سعر الدخول المقترح: $X (مع السبب الفني)
+   🎯 الهدف الأول: $X
+   🎯 الهدف الثاني: $X
+   🛑 وقف الخسارة: $X (مع السبب)
+   📊 نسبة R/R: 1:X
+   ⏰ توقيت الدخول: [الشرط الفني المطلوب]
+
+6. مستوى الثقة: X% مع 3 أسباب و3 مخاطر
+"""
+
         prompt = f"""
 أنت محلل مالي محترف متخصص في الأسهم الأمريكية وخبير في Swing Trading.
-{entry_note}
+
 حلل السهم {symbol} بناءً على:
 البيانات الفنية: {data}
 أخبار السهم: {stock_news}
 أخبار السوق: {market_news}
 الأحداث الجيوسياسية: {geo_news}
-{summary_note if report_type == "summary" else """قدم: الوضع الفني، الوضع الأساسي، تأثير الأخبار، خطة التنفيذ (القرار، الدخول، الهدف، الوقف، R/R)، توقيت الدخول، مستوى الثقة مع الأسباب والمخاطر."""}
-كن دقيقاً بالأرقام.
+
+{format_instruction}
+
+كن دقيقاً بالأرقام ولا تعطِ إجابات مبهمة.
 """
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return message.content[0].text
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def analyze_position(symbol, entry_price, data, stock_news, market_news, geo_news):
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+        prompt = f"""
+أنت محلل مالي محترف متخصص في الأسهم الأمريكية وخبير في Swing Trading.
+
+المستخدم داخل صفقة في {symbol} بسعر دخول ${entry_price}.
+
+حلل وضعه بناءً على:
+البيانات الفنية: {data}
+أخبار السهم: {stock_news}
+أخبار السوق: {market_news}
+الأحداث الجيوسياسية: {geo_news}
+
+قدم تقريراً مختصراً بهذا الشكل:
+
+💼 سعر الدخول: ${entry_price}
+📈 السعر الحالي: $X
+📊 الربح/الخسارة الحالية: X%
+
+🔍 تقييم الوضع: [جملتان فقط عن أهم ما يؤثر الآن]
+
+التوصية:
+إذا الوضع إيجابي:
+✅ ابقَ في الصفقة
+🎯 الهدف المقترح: $X
+🛑 وقف الخسارة: $X
+📊 R/R المتبقي: 1:X
+
+إذا الوضع سلبي:
+❌ اخرج من الصفقة
+💰 سعر الخروج المقترح: $X
+⚠️ السبب: [جملة واحدة واضحة]
+
+✅ مستوى الثقة: X%
+"""
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1000,
             messages=[{"role": "user", "content": prompt}]
         )
         return message.content[0].text
@@ -127,30 +213,27 @@ def analyze():
     try:
         body = request.json
         symbol = body.get("symbol", "").upper()
+        analysis_type = body.get("analysis_type", "general")
         report_type = body.get("report_type", "full")
-        entry = body.get("entry", "")
-        target = body.get("target", "")
-        stop = body.get("stop", "")
-        chat_id = body.get("chat_id", "")
+        entry_price = body.get("entry_price", "")
+
         if not symbol:
             return jsonify({"error": "Symbol required"}), 400
-        print(f"Analyzing {symbol}...")
+
+        print(f"Analyzing {symbol} — type: {analysis_type}")
+
         data = get_latest_data(symbol)
         stock_news = get_stock_news(symbol)
         market_news = get_market_news()
         geo_news = get_geopolitical_news()
-        analysis = analyze_with_claude(symbol, report_type, entry, target, stop, data, stock_news, market_news, geo_news)
-        message = f"""
-🤖 تحليل {symbol}
-📅 {datetime.now().strftime("%Y-%m-%d %H:%M")}
-{"="*35}
-{analysis}
-{"="*35}
-Stocki Bot — AI-Powered Analysis
-"""
-        if chat_id:
-            send_telegram(chat_id, message)
+
+        if analysis_type == "position":
+            analysis = analyze_position(symbol, entry_price, data, stock_news, market_news, geo_news)
+        else:
+            analysis = analyze_general(symbol, report_type, data, stock_news, market_news, geo_news)
+
         return jsonify({"status": "success", "symbol": symbol, "analysis": analysis})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
