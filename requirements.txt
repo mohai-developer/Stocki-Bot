@@ -1,0 +1,10 @@
+flask
+flask-cors
+yfinance
+pandas
+anthropic
+python-telegram-bot
+schedule
+requests
+python-dotenv
+gunicorn
