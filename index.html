@@ -205,35 +205,33 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
       <div class="dash-header">
         <div class="dash-title" id="analyzeTitle">Analyze</div>
       </div>
-      <div class="section-title" id="analyzeSubTitle">Stock details</div>
       <div class="analyze-card">
-        <div class="input-row">
-          <div>
-            <label class="mini-label" id="labelSymbol">Symbol</label>
-            <input class="mini-input" id="analyzeSymbol" placeholder="e.g. TSLA" style="text-transform:uppercase" />
-          </div>
-          <div>
-            <label class="mini-label" id="labelEntry">Entry price</label>
-            <input class="mini-input" id="analyzeEntry" placeholder="0.00" type="number" />
+        <div style="margin-bottom:12px">
+          <label class="mini-label">الرمز</label>
+          <input class="mini-input" id="analyzeSymbol" placeholder="مثال: PLUG" style="text-transform:uppercase" />
+        </div>
+
+        <div class="section-title" style="margin-bottom:8px">نوع التحليل</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <button id="btnGeneral" onclick="setAnalysisType('general',this)" style="background:#1f6feb;border:none;color:#fff;font-size:13px;font-weight:500;padding:10px;border-radius:8px;cursor:pointer">📊 تحليل عام</button>
+          <button id="btnPosition" onclick="setAnalysisType('position',this)" style="background:#0d1117;border:1px solid #30363d;color:#8b949e;font-size:13px;font-weight:500;padding:10px;border-radius:8px;cursor:pointer">💼 تحليل صفقة</button>
+        </div>
+
+        <div id="generalOptions" style="margin-bottom:12px">
+          <div class="section-title" style="margin-bottom:8px">نوع التقرير</div>
+          <div class="report-toggle">
+            <div class="toggle-btn active" onclick="setReport('full',this)">مفصل</div>
+            <div class="toggle-btn" onclick="setReport('summary',this)">مختصر</div>
           </div>
         </div>
-        <div class="input-row">
-          <div>
-            <label class="mini-label" id="labelTarget">Target</label>
-            <input class="mini-input" id="analyzeTarget" placeholder="0.00" type="number" />
-          </div>
-          <div>
-            <label class="mini-label" id="labelStop">Stop loss</label>
-            <input class="mini-input" id="analyzeStop" placeholder="0.00" type="number" />
-          </div>
+
+        <div id="positionOptions" style="display:none;margin-bottom:12px">
+          <label class="mini-label">سعر الدخول</label>
+          <input class="mini-input" id="entryPrice" placeholder="0.00" type="number" />
         </div>
-        <div class="section-title" id="reportTypeTitle" style="margin-bottom:8px">Report type</div>
-        <div class="report-toggle">
-          <div class="toggle-btn active" onclick="setReport('full',this)" id="btnFull">Full Report</div>
-          <div class="toggle-btn" onclick="setReport('summary',this)" id="btnSummary">Summary Only</div>
-        </div>
-        <button class="btn-analyze" onclick="sendAnalysis()" id="btnAnalyze">تحليل</button>
-      </div>
+
+        <button class="btn-analyze" onclick="sendAnalysis()">تحليل</button>
+      </div></div>
 
       <div id="analysisResult" style="display:none;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:1.25rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
