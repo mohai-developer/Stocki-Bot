@@ -377,7 +377,7 @@ var translations={
     loginLabel:'Access Code',
     loginBtn:'Sign In',
     errorMsg:'Invalid access code',
-    disclaimer:'This tool is for informational purposes only and does not constitute investment advice. Trading involves risk, and all investment decisions are solely the user\'s responsibility.',
+    disclaimer:"This tool is for informational purposes only and does not constitute investment advice. Trading involves risk, and all investment decisions are solely the user's responsibility.",
     dashTitle:'Dashboard',
     statLabelStocks:'Stocks',statLabelBuy:'Buy signals',statLabelUsers:'Users',
     watchlistTitle:'Watchlist — tap to analyze',
@@ -532,6 +532,7 @@ function login(){
       else expEl.textContent=t('expires')+': '+found.expiry;
     }
     renderAll();
+    loadDashboard();
   } else {
     showError();
   }
@@ -565,28 +566,57 @@ function setReport(type,el){
   el.classList.add('active');
 }
 
-function renderStockGrid(){
+function renderStockGrid(liveStocks){
   var grid=document.getElementById('stockGrid');
+  var data=liveStocks||stocks;
   var buyCount=0;
-  grid.innerHTML=stocks.map(function(s){
+  var html='';
+  for(var i=0;i<data.length;i++){
+    var s=data[i];
     var sc=s.signal==='buy'?'signal-buy':s.signal==='exit'?'signal-exit':'signal-wait';
     var st=s.signal==='buy'?(lang==='ar'?'شراء':'Buy'):s.signal==='exit'?(lang==='ar'?'اخرج':'Exit'):(lang==='ar'?'انتظر':'Wait');
     var cc=s.conf>=65?'conf-blue':s.conf>=50?'conf-yellow':'conf-red';
-    var chStr=(s.change>=0?'+':'')+s.change.toFixed(1)+'%';
-    var chClass=s.change>=0?'green':'red';
+    var price=s.price||0;
+    var change=s.change||0;
+    var chStr=(change>=0?'+':'')+change.toFixed(2)+'%';
+    var chClass=change>=0?'green':'red';
     if(s.signal==='buy') buyCount++;
-    return '<div class="stock-card" onclick="openStock(\''+s.symbol+'\')">'+
-      '<div class="stock-top"><div class="stock-symbol">'+s.symbol+'</div><div class="signal '+sc+'">'+st+'</div></div>'+
-      '<div class="stock-price">$'+s.price.toFixed(2)+'</div>'+
-      '<div class="stock-change '+chClass+'">'+chStr+'</div>'+
-      '<div class="conf-bar"><div class="conf-fill '+cc+'" style="width:'+s.conf+'%"></div></div>'+
-      '<div class="conf-label">'+(lang==='ar'?'الثقة':'Confidence')+' '+s.conf+'%</div>'+
-      '<div class="days-badge">'+s.days+(lang==='ar'?' يوم بيانات':' day data')+'</div>'+
-    '</div>';
-  }).join('');
-  document.getElementById('statStocks').textContent=stocks.length;
+    var rsiHtml=s.rsi?'<div class="days-badge">RSI: '+s.rsi+'</div>':'';
+    html+='<div class="stock-card" onclick="openStock(this.dataset.sym)" data-sym="'+s.symbol+'">';
+    html+='<div class="stock-top"><div class="stock-symbol">'+s.symbol+'</div><div class="signal '+sc+'">'+st+'</div></div>';
+    html+='<div class="stock-price">$'+price.toFixed(2)+'</div>';
+    html+='<div class="stock-change '+chClass+'">'+chStr+'</div>';
+    html+='<div class="conf-bar"><div class="conf-fill '+cc+'" style="width:'+s.conf+'%"></div></div>';
+    html+='<div class="conf-label">'+(lang==='ar'?'الثقة':'Confidence')+' '+s.conf+'%</div>';
+    html+=rsiHtml+'</div>';
+  }
+  grid.innerHTML=html;
+  document.getElementById('statStocks').textContent=data.length;
   document.getElementById('statBuy').textContent=buyCount;
 }
+
+function loadDashboard(){
+  var symbols=stocks.map(function(s){return s.symbol;});
+  document.getElementById('stockGrid').innerHTML='<div style="grid-column:1/-1;text-align:center;padding:2rem;color:#8b949e;font-size:13px">&#x23F3; Loading...</div>';
+  fetch(API_URL+'/dashboard',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({symbols:symbols})
+  })
+  .then(function(res){return res.json();})
+  .then(function(data){
+    if(data.status==='success'){
+      renderStockGrid(data.stocks);
+      document.getElementById('statBuy').textContent=data.buy_count;
+      document.getElementById('statStocks').textContent=data.stocks.length;
+    }
+  })
+  .catch(function(err){
+    console.error('Dashboard error:',err);
+    renderStockGrid();
+  });
+}
+
 
 function renderStockList(){
   var list=document.getElementById('stockList');
@@ -656,7 +686,8 @@ function renderAll(){
   renderAlerts();
 }
 
-function openStock(symbol){
+function openStock(el){
+  var symbol = typeof el === 'string' ? el : el;
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
   document.getElementById('pageAnalyze').classList.add('active');
   document.querySelectorAll('.nav-item').forEach(function(n,i){n.classList.toggle('active',i===1)});
