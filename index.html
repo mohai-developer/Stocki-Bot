@@ -122,13 +122,21 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
 .divider{border:none;border-top:1px solid #30363d;margin:0.875rem 0}
 </style>
 </head>
-<body>
+<body dir="rtl">
 
 <div class="toast" id="toast"></div>
 
-<div id="installBanner" style="display:none;background:#1f3a5f;border-bottom:1px solid #1f6feb;padding:10px 16px;display:flex;align-items:center;justify-content:space-between">
-  <div style="font-size:13px;color:#e6edf3" id="installText">Add Stocki Bot to your home screen</div>
-  <button onclick="installApp()" id="installBtn" style="background:#1f6feb;border:none;color:#fff;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer">Add</button>
+<div id="installBanner" style="display:none;background:#1f3a5f;border-bottom:1px solid #1f6feb;padding:10px 16px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div style="font-size:13px;color:#e6edf3;font-weight:500">📲 أضف التطبيق للشاشة الرئيسية</div>
+    <button onclick="document.getElementById('installBanner').style.display='none'" style="background:transparent;border:none;color:#8b949e;font-size:16px;cursor:pointer">✕</button>
+  </div>
+  <div id="iosInstructions" style="display:none;font-size:12px;color:#8b949e;line-height:1.8">
+    اضغط على <strong style="color:#58a6ff">زر المشاركة</strong> ثم اختر <strong style="color:#58a6ff">إضافة للشاشة الرئيسية</strong>
+  </div>
+  <div id="androidInstructions" style="display:none">
+    <button onclick="installApp()" style="width:100%;background:#1f6feb;border:none;color:#fff;font-size:13px;font-weight:500;padding:8px;border-radius:6px;cursor:pointer">تثبيت التطبيق</button>
+  </div>
 </div>
 
 
@@ -137,8 +145,8 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
     <img src="logo.png" style="width:32px;height:32px;object-fit:contain;margin-right:8px" alt="logo"><div><div class="logo-name">Stocki Bot</div><div class="logo-sub">POWERED BY AI</div></div>
   </div>
   <div class="lang-toggle">
-    <button class="lang-btn active" onclick="setLang('en',this)">EN</button>
-    <button class="lang-btn" onclick="setLang('ar',this)">ع</button>
+    <button class="lang-btn" onclick="setLang('en',this)">EN</button>
+    <button class="lang-btn active" onclick="setLang('ar',this)">ع</button>
   </div>
 </div>
 
@@ -343,7 +351,7 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
 </div>
 
 <script>
-var lang='en';
+var lang='ar';
 var currentUser=null;
 var reportType='full';
 
@@ -715,15 +723,32 @@ document.getElementById('codeInput').addEventListener('keypress',function(e){
 });
 
 generateCode();
+applyTranslations();
+renderAll();
 </script>
 
 <script>
 var deferredPrompt;
+var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+var isAndroid = /android/i.test(navigator.userAgent);
+var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+if(!isStandalone) {
+  if(isIOS) {
+    document.getElementById('installBanner').style.display = 'block';
+    document.getElementById('iosInstructions').style.display = 'block';
+  }
+}
+
 window.addEventListener('beforeinstallprompt', function(e) {
   e.preventDefault();
   deferredPrompt = e;
-  document.getElementById('installBanner').style.display = 'flex';
+  if(!isStandalone) {
+    document.getElementById('installBanner').style.display = 'block';
+    document.getElementById('androidInstructions').style.display = 'block';
+  }
 });
+
 function installApp() {
   if(deferredPrompt) {
     deferredPrompt.prompt();
@@ -733,6 +758,7 @@ function installApp() {
     });
   }
 }
+
 window.addEventListener('appinstalled', function() {
   document.getElementById('installBanner').style.display = 'none';
 });
