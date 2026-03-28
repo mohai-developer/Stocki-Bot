@@ -732,8 +732,23 @@ var analysisType = 'general';
 
 function setAnalysisType(type, el) {
   analysisType = type;
-  document.getElementById('btnGeneral').style.opacity = type === 'general' ? '1' : '0.5';
-  document.getElementById('btnPosition').style.opacity = type === 'position' ? '1' : '0.5';
+  var btnG = document.getElementById('btnGeneral');
+  var btnP = document.getElementById('btnPosition');
+  if(type === 'general'){
+    btnG.style.background = '#1f6feb';
+    btnG.style.color = '#fff';
+    btnG.style.border = 'none';
+    btnP.style.background = '#0d1117';
+    btnP.style.color = '#8b949e';
+    btnP.style.border = '1px solid #30363d';
+  } else {
+    btnP.style.background = '#238636';
+    btnP.style.color = '#fff';
+    btnP.style.border = 'none';
+    btnG.style.background = '#0d1117';
+    btnG.style.color = '#8b949e';
+    btnG.style.border = '1px solid #30363d';
+  }
   document.getElementById('generalOptions').style.display = type === 'general' ? 'block' : 'none';
   document.getElementById('positionOptions').style.display = type === 'position' ? 'block' : 'none';
 }
