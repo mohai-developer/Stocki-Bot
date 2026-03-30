@@ -3,6 +3,7 @@ import json
 import re
 import yfinance as yf
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from dotenv import load_dotenv
 import requests
@@ -18,25 +19,25 @@ NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 # HELPERS
 # ============================================================
 def clean_json(text):
-    text = text.strip()
+    if isinstance(text, dict):
+        return text
+    text = str(text).strip()
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
     start = text.find("{")
     end = text.rfind("}") + 1
     if start >= 0 and end > start:
-        text = text[start:end]
-    return text
+        return text[start:end]
+    return "{}"
 
-def safe_json_load(text, fallback="{}"):
+def safe_json(text):
     try:
         if isinstance(text, dict):
             return text
-        if isinstance(text, str):
-            return json.loads(clean_json(text))
-        return json.loads(fallback)
+        return json.loads(clean_json(text))
     except Exception as e:
-        print(f"⚠️ JSON parse fallback: {e}")
-        return json.loads(fallback)
+        print(f"⚠️ JSON parse error: {e}")
+        return {}
 
 def call_gpt(prompt):
     url = "https://api.openai.com/v1/chat/completions"
@@ -50,20 +51,77 @@ def call_gpt(prompt):
         "max_tokens": 1500
     }
     try:
-        resp = requests.post(url, headers=headers, json=body, timeout=30)
-        data = resp.json()
+        r = requests.post(url, headers=headers, json=body, timeout=30)
+        data = r.json()
         if "choices" in data:
-            result = data["choices"][0]["message"]["content"]
-            return result
-        else:
-            print(f"GPT error: {data}")
-            return None
+            return data["choices"][0]["message"]["content"]
+        print(f"GPT error: {data}")
+        return "{}"
     except Exception as e:
-        print(f"GPT call exception: {e}")
-        return None
+        print(f"GPT exception: {e}")
+        return "{}"
 
 # ============================================================
-# FETCH LIVE DATA
+# QUANT ENGINE — EDGE SCORE
+# ============================================================
+def calculate_edge(hist):
+    close = hist["Close"]
+    volume = hist["Volume"]
+
+    # Z-Score السعر
+    mean20 = close.rolling(20).mean()
+    std20 = close.rolling(20).std()
+    z = round(((close - mean20) / std20).iloc[-1], 2)
+
+    # Z-Score الحجم
+    vol_mean = volume.rolling(20).mean()
+    vol_std = volume.rolling(20).std()
+    vol_z = round(((volume - vol_mean) / vol_std).iloc[-1], 2)
+
+    # الاتجاه — 3 طبقات صحيحة
+    sma50 = close.rolling(50).mean()
+    sma200 = close.rolling(min(200, len(close))).mean()
+    ema20 = close.ewm(span=20).mean()
+
+    trend_long  = int(close.iloc[-1] > sma200.iloc[-1])   # السعر فوق SMA200
+    trend_mid   = int(sma50.iloc[-1] > sma200.iloc[-1])   # SMA50 فوق SMA200
+    trend_short = int(ema20.iloc[-1] > sma50.iloc[-1])    # EMA20 فوق SMA50
+    trend_score = trend_long + trend_mid + trend_short     # 0-3
+
+    # تسمية الاتجاه
+    trend_labels = {3: "strong_uptrend", 2: "weak_uptrend",
+                    1: "weak_downtrend", 0: "strong_downtrend"}
+    trend_label = trend_labels[trend_score]
+
+    # حساب EdgeScore
+    edge = 50
+
+    if z < -2:    edge += 20
+    elif z < -1:  edge += 10
+    elif z > 2:   edge -= 20
+    elif z > 1:   edge -= 10
+
+    if vol_z > 2:  edge += 15
+    elif vol_z > 1: edge += 5
+    elif vol_z < -1: edge -= 5
+
+    if trend_score == 3:   edge += 15
+    elif trend_score == 2: edge += 5
+    elif trend_score == 1: edge -= 5
+    elif trend_score == 0: edge -= 15
+
+    edge = max(0, min(100, round(edge)))
+
+    return {
+        "EdgeScore": edge,
+        "z_score": z,
+        "volume_z": vol_z,
+        "trend_score": trend_score,
+        "trend": trend_label
+    }
+
+# ============================================================
+# FETCH LIVE DATA — كاملة ودقيقة
 # ============================================================
 def fetch_live_data(symbol):
     try:
@@ -75,57 +133,67 @@ def fetch_live_data(symbol):
         if len(hist) < 20:
             return None
 
-        delta = hist["Close"].diff()
+        close = hist["Close"]
+
+        # RSI
+        delta = close.diff()
         gain = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
         loss = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
         rsi = round(100 - (100 / (1 + gain.iloc[-1] / loss.iloc[-1])), 2)
 
-        ema12 = hist["Close"].ewm(span=12).mean()
-        ema26 = hist["Close"].ewm(span=26).mean()
-        macd = round((ema12 - ema26).iloc[-1], 4)
-        macd_signal_line = round((ema12 - ema26).ewm(span=9).mean().iloc[-1], 4)
-        macd_cross = "bullish" if macd > macd_signal_line else "bearish"
+        # MACD
+        ema12 = close.ewm(span=12).mean()
+        ema26 = close.ewm(span=26).mean()
+        macd_val = round((ema12 - ema26).iloc[-1], 4)
+        macd_sig = round((ema12 - ema26).ewm(span=9).mean().iloc[-1], 4)
+        macd_cross = "bullish" if macd_val > macd_sig else "bearish"
 
-        sma20 = hist["Close"].rolling(20).mean().iloc[-1]
-        std20 = hist["Close"].rolling(20).std().iloc[-1]
+        # Bollinger
+        sma20 = close.rolling(20).mean().iloc[-1]
+        std20 = close.rolling(20).std().iloc[-1]
         bb_upper = round(sma20 + 2 * std20, 2)
         bb_lower = round(sma20 - 2 * std20, 2)
-        bb_position = round(((hist["Close"].iloc[-1] - bb_lower) / (bb_upper - bb_lower)) * 100, 1)
+        bb_pos = round(((close.iloc[-1] - bb_lower) / (bb_upper - bb_lower)) * 100, 1) if bb_upper != bb_lower else 50
 
-        sma50 = round(hist["Close"].rolling(50).mean().iloc[-1], 2)
-        sma200 = round(hist["Close"].rolling(min(200, len(hist))).mean().iloc[-1], 2)
-        ema20 = round(hist["Close"].ewm(span=20).mean().iloc[-1], 2)
+        # Moving Averages
+        sma50  = round(close.rolling(50).mean().iloc[-1], 2)
+        sma200 = round(close.rolling(min(200, len(close))).mean().iloc[-1], 2)
+        ema20  = round(close.ewm(span=20).mean().iloc[-1], 2)
 
-        avg_vol = round(hist["Volume"].rolling(20).mean().iloc[-1])
+        # Volume
+        avg_vol   = round(hist["Volume"].rolling(20).mean().iloc[-1])
         vol_ratio = round(hist["Volume"].iloc[-1] / avg_vol, 2)
 
-        weekly_trend = "uptrend" if hist_weekly["Close"].iloc[-1] > hist_weekly["Close"].iloc[-4] else "downtrend"
+        # 52-week
+        high_52w     = round(close.max(), 2)
+        low_52w      = round(close.min(), 2)
+        pct_from_high = round(((close.iloc[-1] - high_52w) / high_52w) * 100, 2)
 
-        high_52w = round(hist["Close"].max(), 2)
-        low_52w = round(hist["Close"].min(), 2)
-        pct_from_high = round(((hist["Close"].iloc[-1] - high_52w) / high_52w) * 100, 2)
+        # Changes
+        change_1d = round(((close.iloc[-1] - close.iloc[-2]) / close.iloc[-2]) * 100, 2)
+        change_1w = round(((close.iloc[-1] - close.iloc[-6]) / close.iloc[-6]) * 100, 2) if len(hist) >= 6 else 0
+        change_1m = round(((close.iloc[-1] - close.iloc[-22]) / close.iloc[-22]) * 100, 2) if len(hist) >= 22 else 0
 
-        change_1d = round(((hist["Close"].iloc[-1] - hist["Close"].iloc[-2]) / hist["Close"].iloc[-2]) * 100, 2)
-        change_1w = round(((hist["Close"].iloc[-1] - hist["Close"].iloc[-6]) / hist["Close"].iloc[-6]) * 100, 2) if len(hist) >= 6 else 0
-        change_1m = round(((hist["Close"].iloc[-1] - hist["Close"].iloc[-22]) / hist["Close"].iloc[-22]) * 100, 2) if len(hist) >= 22 else 0
+        # Edge Score
+        edge = calculate_edge(hist)
 
         return {
             "symbol": symbol,
             "date": datetime.now().strftime("%Y-%m-%d"),
-            "close": round(hist["Close"].iloc[-1], 2),
-            "prev_close": round(hist["Close"].iloc[-2], 2),
+            "close": round(close.iloc[-1], 2),
+            "prev_close": round(close.iloc[-2], 2),
             "change_1d": change_1d,
             "change_1w": change_1w,
             "change_1m": change_1m,
             "pre_market": round(info.get("preMarketPrice", 0) or 0, 2),
             "after_hours": round(info.get("postMarketPrice", 0) or 0, 2),
             "rsi": rsi,
-            "macd": macd,
-            "macd_signal": macd_signal_line,
+            "macd": macd_val,
+            "macd_signal": macd_sig,
             "macd_cross": macd_cross,
             "bb_upper": bb_upper,
             "bb_lower": bb_lower,
-            "bb_position": bb_position,
+            "bb_position": bb_pos,
             "sma50": sma50,
             "sma200": sma200,
             "ema20": ema20,
@@ -135,12 +203,16 @@ def fetch_live_data(symbol):
             "high_52w": high_52w,
             "low_52w": low_52w,
             "pct_from_high": pct_from_high,
-            "weekly_trend": weekly_trend,
+            "trend": edge["trend"],
+            "trend_score": edge["trend_score"],
+            "edge_score": edge["EdgeScore"],
+            "z_score": edge["z_score"],
+            "volume_z": edge["volume_z"],
             "pe_ratio": round(info.get("trailingPE", 0) or 0, 2),
             "market_cap_b": round((info.get("marketCap", 0) or 0) / 1e9, 1),
         }
     except Exception as e:
-        print(f"Error fetching data for {symbol}: {e}")
+        print(f"❌ Error fetching {symbol}: {e}")
         return None
 
 # ============================================================
@@ -148,16 +220,10 @@ def fetch_live_data(symbol):
 # ============================================================
 def fetch_stock_news(symbol):
     try:
-        ticker = yf.Ticker(symbol)
-        news = ticker.news
+        news = yf.Ticker(symbol).news
         if not news:
             return "No recent news"
-        items = []
-        for n in news[:5]:
-            title = n.get("title", "")
-            publisher = n.get("publisher", "")
-            items.append(f"- {title} ({publisher})")
-        return "\n".join(items)
+        return "\n".join([f"- {n.get('title','')} ({n.get('publisher','')})" for n in news[:5]])
     except:
         return "Could not fetch news"
 
@@ -166,63 +232,120 @@ def fetch_macro_news():
         url = "https://newsapi.org/v2/everything"
         params = {
             "apiKey": NEWS_API_KEY,
-            "q": "Fed interest rates OR inflation OR geopolitical OR trade war OR recession",
-            "language": "en",
-            "sortBy": "publishedAt",
-            "pageSize": 5
+            "q": "Fed OR inflation OR trade war OR recession OR geopolitical",
+            "language": "en", "sortBy": "publishedAt", "pageSize": 5
         }
         resp = requests.get(url, params=params, timeout=10)
         data = resp.json()
         if data.get("status") != "ok":
             return "Could not fetch macro news"
-        items = []
-        for a in data.get("articles", [])[:5]:
-            items.append(f"- {a.get('title','')} ({a.get('source',{}).get('name','')})")
-        return "\n".join(items)
+        return "\n".join([f"- {a.get('title','')} ({a.get('source',{}).get('name','')})"
+                          for a in data.get("articles", [])[:5]])
     except:
         return "Could not fetch macro news"
 
 # ============================================================
+# INSTITUTIONAL MEMORY
+# ============================================================
+def load_memory(symbol, log_file="shadow_log.csv"):
+    if not os.path.exists(log_file):
+        return None
+    try:
+        df = pd.read_csv(log_file)
+        df_s = df[df["symbol"] == symbol].tail(10)
+        if df_s.empty:
+            return None
+
+        # Add missing columns for backward compatibility
+        for col in ["trend","edge_score","actual_result","score"]:
+            if col not in df_s.columns:
+                df_s[col] = ""
+
+        last_5 = df_s.tail(5)[["date","close","rsi","trend","edge_score",
+                                "decision","confidence","actual_result","score"]].to_dict(orient="records")
+
+        scored = df_s[df_s["score"] != ""].copy()
+        if len(scored) > 0:
+            scored["score_num"] = pd.to_numeric(scored["score"], errors="coerce")
+            win_rate = round(len(scored[scored["score_num"] > 0]) / len(scored) * 100, 1)
+            avg_score = round(scored["score_num"].mean(), 2)
+        else:
+            win_rate = avg_score = 0
+
+        return {
+            "symbol": symbol,
+            "total_sessions": len(df_s),
+            "win_rate": win_rate,
+            "avg_score": avg_score,
+            "execute_count": len(df_s[df_s["decision"] == "Execute"]),
+            "last_5": last_5
+        }
+    except Exception as e:
+        print(f"Memory error: {e}")
+        return None
+
+def format_memory(memory):
+    if not memory:
+        return "No previous sessions. First analysis."
+    lines = [
+        f"MEMORY — {memory['symbol']}",
+        f"Sessions: {memory['total_sessions']} | Win Rate: {memory['win_rate']}% | Avg Score: {memory['avg_score']}",
+        f"Execute count: {memory['execute_count']}",
+        "Last 5:"
+    ]
+    for d in memory["last_5"]:
+        lines.append(f"  {d['date']} | Close:{d['close']} | Edge:{d.get('edge_score','?')} | Decision:{d['decision']} | Result:{d.get('actual_result','Pending')}")
+    return "\n".join(lines)
+
+# ============================================================
 # PHASE 1 — ANALYST (Claude)
 # ============================================================
-def run_analyst(symbol, data, protocol, memory_text=""):
+def run_analyst(symbol, data, memory_text):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     prompt = f"""
-{protocol}
+You are a professional technical analyst for US stocks (Swing Trading, Daily timeframe).
 
-You are now acting as the ANALYST role only.
-Analyze {symbol} using the provided daily data.
-Output ONLY the [Analyst Output] JSON section.
-Be precise with numbers. No vague statements.
-
-INSTITUTIONAL MEMORY (use this to improve your analysis):
-{memory_text}
+Stock: {symbol}
+Memory: {memory_text}
 
 LIVE DATA:
 {json.dumps(data, indent=2)}
 
-Respond ONLY with valid JSON in the [Analyst Output] format defined in the protocol.
+Analyze price action, trend, momentum, and key levels.
+Return ONLY this JSON:
+{{
+  "TechnicalScore": 0-100,
+  "Trend": "description",
+  "KeySupport": 0,
+  "KeyResistance": 0,
+  "EntryZone": 0,
+  "StopLoss": 0,
+  "Target1": 0,
+  "Target2": 0,
+  "Summary": "clear reasoning"
+}}
 """
     msg = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=2000,
+        max_tokens=1000,
         messages=[{"role": "user", "content": prompt}]
     )
-    return msg.content[0].text
+    return safe_json(msg.content[0].text)
 
 # ============================================================
 # PHASE 2 — MARKET INTELLIGENCE (GPT)
 # ============================================================
-def run_market_intelligence(symbol, stock_news, macro_news, protocol, memory_text=""):
+def run_market_intelligence(symbol, data, stock_news, macro_news, memory_text):
     prompt = f"""
-{protocol}
+You are Market Intelligence for US stock trading.
 
-You are now acting as the MARKET INTELLIGENCE role only.
-Analyze macro environment and news impact for {symbol}.
-Output ONLY the [Market Intelligence Output] JSON section.
+Stock: {symbol}
+Memory: {memory_text}
 
-INSTITUTIONAL MEMORY:
-{memory_text}
+TECHNICAL CONTEXT (use this to interpret news):
+Close: {data['close']} | RSI: {data['rsi']} | MACD: {data['macd_cross']}
+Trend: {data['trend']} | EdgeScore: {data['edge_score']} | Z-Score: {data['z_score']}
+Volume ratio: {data['volume_ratio']}x
 
 STOCK NEWS:
 {stock_news}
@@ -230,259 +353,123 @@ STOCK NEWS:
 MACRO NEWS:
 {macro_news}
 
-Respond ONLY with valid JSON in the [Market Intelligence Output] format defined in the protocol.
-"""
-    result = call_gpt(prompt)
-    if result:
-        return result
-    return f'{{"Role":"Market Intelligence","Ticker":"{symbol}","MarketBias":"Unknown","ImpactScore":0,"KeyCatalysts":["API error"],"MacroFactors":[],"Notes":"API error"}}'
-
-# ============================================================
-# PHASE 3 — CRITIC (GPT)
-# ============================================================
-def run_critic(symbol, analyst_output, market_output, protocol):
-    prompt = f"""
-{protocol}
-
-You are now acting as the CRITIC role only.
-Evaluate the Analyst and Market Intelligence outputs for {symbol}.
-
-You MUST respond with ONLY this exact JSON structure, no extra nesting:
+Interpret how news and macro factors interact with current technical condition.
+Return ONLY this JSON:
 {{
-  "Role": "Critic",
-  "Ticker": "{symbol}",
-  "EarlyEntryJustified": true or false,
-  "ExitTimingValid": true or false,
-  "IssuesFound": ["issue1", "issue2"],
-  "Contradictions": ["contradiction1"],
-  "CriticVerdict": "Pass" or "Conditional" or "Reject",
-  "VerdictReason": "reason here"
+  "MacroScore": 0-100,
+  "MarketBias": "Risk On or Risk Off",
+  "KeyCatalyst": "most important factor",
+  "NewsImpact": "positive/negative/neutral",
+  "Summary": "contextual reasoning"
 }}
-
-ANALYST OUTPUT:
-{analyst_output}
-
-MARKET INTELLIGENCE OUTPUT:
-{market_output}
-
-Respond ONLY with the JSON above. No markdown, no extra text, no nesting.
 """
-    result = call_gpt(prompt)
-    if result:
-        return result
-    return '{"Role":"Critic","EarlyEntryJustified":false,"ExitTimingValid":false,"IssuesFound":["API error"],"Contradictions":[],"CriticVerdict":"Reject","VerdictReason":"API error"}'
+    return safe_json(call_gpt(prompt))
 
 # ============================================================
-# PHASE 4 — DECISION ENGINE (GPT)
+# PHASE 3 — CRITIC (SCORING ONLY — NO VETO)
 # ============================================================
-def run_decision_engine(symbol, analyst_output, market_output, critic_output, protocol):
+def run_critic(symbol, analyst, market_intel):
     prompt = f"""
-{protocol}
+You are a risk evaluator. Your job is SCORING ONLY — you have NO veto power.
 
-You are now acting as the DECISION ENGINE role only.
-Make the final trading decision for {symbol}.
+Evaluate the consistency between Analyst and Market Intelligence for {symbol}.
 
-STRICT RULES:
-- This system is for LONG positions ONLY (buying stocks or call options)
-- SHORT selling is strictly FORBIDDEN
-- If the outlook is bearish, the decision must be "No Trade" not a short position
-- Entry price must always be BELOW or EQUAL to current price for long entries
-- Target price must always be ABOVE entry price
+Analyst: {json.dumps(analyst)}
+Market Intel: {json.dumps(market_intel)}
 
-You MUST respond with ONLY this exact JSON structure, no extra nesting:
+Return ONLY this JSON:
 {{
-  "Role": "Decision Engine",
-  "Ticker": "{symbol}",
-  "InstrumentType": "Stock" or "Call Option" or "Put Option" or "No Trade",
-  "InstrumentReason": "reason here",
-  "TradePlan": {{
-    "Entry": 0,
-    "Stop": 0,
-    "TargetPartial": 0,
-    "TargetFull": 0,
-    "TrailingStop": "description",
-    "RiskReward": "1:X"
-  }},
-  "ConfidenceScore": 0,
-  "Decision": "Execute" or "Abstain" or "No Trade",
-  "AbstentionTriggered": false,
-  "MemoryLog": "summary here"
+  "ConsistencyScore": 0-100,
+  "RiskLevel": "Low/Medium/High",
+  "Risks": ["risk1", "risk2"],
+  "Alignment": "aligned/divergent"
 }}
-
-ANALYST OUTPUT:
-{analyst_output}
-
-MARKET INTELLIGENCE OUTPUT:
-{market_output}
-
-CRITIC OUTPUT:
-{critic_output}
-
-Respond ONLY with the JSON above. No markdown, no extra text, no nesting.
 """
-    result = call_gpt(prompt)
-    if result:
-        return result
-    return '{"Role":"Decision Engine","Ticker":"","InstrumentType":"No Trade","InstrumentReason":"API error","TradePlan":{"Entry":"N/A","Stop":"N/A","TargetPartial":"N/A","TargetFull":"N/A","TrailingStop":"N/A","RiskReward":"N/A"},"ConfidenceScore":0,"Decision":"No Trade","AbstentionTriggered":false}'
+    return safe_json(call_gpt(prompt))
+
+# ============================================================
+# PHASE 4 — DECISION ENGINE (Weighted Probability)
+# ============================================================
+def run_decision(symbol, data, analyst, market_intel, critic):
+    edge = data.get("edge_score", 50)
+    tech  = analyst.get("TechnicalScore", 50)
+    macro = market_intel.get("MacroScore", 50)
+    cons  = critic.get("ConsistencyScore", 50)
+
+    # Weighted score
+    final = round(
+        0.40 * edge +
+        0.25 * tech  +
+        0.20 * macro +
+        0.15 * cons
+    )
+
+    if final >= 72:
+        decision = "Execute"
+    elif final >= 58:
+        decision = "Conditional"
+    else:
+        decision = "No Trade"
+
+    # Entry/Stop/Target من Analyst أو محسوبة
+    close = data["close"]
+    entry   = analyst.get("EntryZone") or round(close * 0.997, 2)
+    stop    = analyst.get("StopLoss")  or round(close * 0.97, 2)
+    target1 = analyst.get("Target1")   or round(close * 1.05, 2)
+    target2 = analyst.get("Target2")   or round(close * 1.10, 2)
+
+    rr = round((target1 - entry) / (entry - stop), 2) if (entry - stop) > 0 else 0
+
+    return {
+        "Decision": decision,
+        "Confidence": final,
+        "EdgeScore": edge,
+        "FinalScore": final,
+        "Scores": {"Edge": edge, "Technical": tech, "Macro": macro, "Consistency": cons},
+        "Plan": {
+            "Entry": entry,
+            "Stop": stop,
+            "Target1": target1,
+            "Target2": target2,
+            "RiskReward": f"1:{rr}"
+        }
+    }
 
 # ============================================================
 # SAVE SHADOW LOG
 # ============================================================
-def save_shadow_log(symbol, analyst, market, critic, decision, data):
+def save_shadow_log(symbol, data, decision):
     log_file = "shadow_log.csv"
-
-    critic_raw = safe_json_load(critic)
-    decision_raw = safe_json_load(decision)
-
-    # Handle nested: {"Critic Output": {...}} or flat {"CriticVerdict": ...}
-    critic_json = critic_raw.get("Critic Output", critic_raw)
-    decision_json = decision_raw.get("Decision Output", decision_raw)
-
-    verdict = (
-        critic_json.get("CriticVerdict") or
-        critic_json.get("verdict") or
-        critic_json.get("Verdict") or
-        "Unknown"
-    )
-
-    final_decision = (
-        decision_json.get("Decision") or
-        decision_json.get("trading_decision") or
-        decision_json.get("decision") or
-        "Unknown"
-    )
-
-    confidence = (
-        decision_json.get("ConfidenceScore") or
-        decision_json.get("confidence_score") or
-        decision_json.get("confidence") or
-        0
-    )
-
-    trade_plan = (
-        decision_json.get("TradePlan") or
-        decision_json.get("trade_plan") or
-        decision_json.get("trading_plan") or
-        {}
-    )
-
-    entry = trade_plan.get("Entry") or trade_plan.get("entry") or "N/A"
-    stop = trade_plan.get("Stop") or trade_plan.get("stop") or "N/A"
-    target = trade_plan.get("TargetFull") or trade_plan.get("target") or trade_plan.get("Target") or "N/A"
-    rr = trade_plan.get("RiskReward") or trade_plan.get("risk_reward") or "N/A"
-
     row = {
         "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "symbol": symbol,
         "close": data.get("close", 0),
         "rsi": data.get("rsi", 0),
         "macd_cross": data.get("macd_cross", ""),
+        "trend": data.get("trend", ""),
+        "edge_score": data.get("edge_score", 0),
         "volume_ratio": data.get("volume_ratio", 0),
-        "weekly_trend": data.get("weekly_trend", ""),
-        "critic_verdict": verdict,
-        "decision": final_decision,
-        "confidence": confidence,
-        "entry": entry,
-        "stop": stop,
-        "target": target,
-        "rr": rr,
+        "decision": decision.get("Decision", ""),
+        "confidence": decision.get("Confidence", 0),
+        "entry": decision.get("Plan", {}).get("Entry", "N/A"),
+        "stop": decision.get("Plan", {}).get("Stop", "N/A"),
+        "target": decision.get("Plan", {}).get("Target1", "N/A"),
+        "rr": decision.get("Plan", {}).get("RiskReward", "N/A"),
         "actual_result": "",
         "score": ""
     }
-
     df_new = pd.DataFrame([row])
     if os.path.exists(log_file):
-        df_existing = pd.read_csv(log_file)
-        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+        df = pd.read_csv(log_file)
+        df = pd.concat([df, df_new], ignore_index=True)
     else:
-        df_combined = df_new
-
-    df_combined.to_csv(log_file, index=False)
-    print(f"✅ Shadow log saved for {symbol}")
+        df = df_new
+    df.to_csv(log_file, index=False)
+    print(f"✅ Log saved for {symbol}")
     return row
 
-
 # ============================================================
-# INSTITUTIONAL MEMORY LAYER
-# ============================================================
-def load_memory(symbol, log_file="shadow_log.csv"):
-    """Load last 5 decisions for symbol and calculate accuracy"""
-    if not os.path.exists(log_file):
-        return None
-
-    try:
-        df = pd.read_csv(log_file)
-        df_symbol = df[df["symbol"] == symbol].tail(10)
-
-        if df_symbol.empty:
-            return None
-
-        # Last 5 decisions
-        last_5 = df_symbol.tail(5)[["date", "close", "rsi", "macd_cross", 
-                                     "critic_verdict", "decision", "confidence",
-                                     "entry", "stop", "target", "rr",
-                                     "actual_result", "score"]].to_dict(orient="records")
-
-        # Calculate stats
-        total = len(df_symbol)
-        scored = df_symbol[df_symbol["score"] != ""].copy()
-        
-        if len(scored) > 0:
-            scored["score_num"] = pd.to_numeric(scored["score"], errors="coerce")
-            avg_score = round(scored["score_num"].mean(), 2)
-            wins = len(scored[scored["score_num"] > 0])
-            win_rate = round(wins / len(scored) * 100, 1)
-        else:
-            avg_score = 0
-            win_rate = 0
-
-        # Execute decisions
-        execute_count = len(df_symbol[df_symbol["decision"] == "Execute"])
-        no_trade_count = len(df_symbol[df_symbol["decision"] == "No Trade"])
-
-        return {
-            "symbol": symbol,
-            "total_sessions": total,
-            "last_5_decisions": last_5,
-            "win_rate": win_rate,
-            "avg_score": avg_score,
-            "execute_count": execute_count,
-            "no_trade_count": no_trade_count,
-            "note": "Memory loaded from shadow_log.csv"
-        }
-    except Exception as e:
-        print(f"Memory load error: {e}")
-        return None
-
-def format_memory(memory):
-    """Format memory for prompt injection"""
-    if not memory:
-        return "No previous sessions for this asset. This is the first analysis."
-
-    lines = [
-        f"INSTITUTIONAL MEMORY — {memory['symbol']}",
-        f"Total sessions: {memory['total_sessions']}",
-        f"Win rate: {memory['win_rate']}%",
-        f"Avg score: {memory['avg_score']}",
-        f"Execute decisions: {memory['execute_count']}",
-        f"No Trade decisions: {memory['no_trade_count']}",
-        "",
-        "Last 5 decisions:"
-    ]
-
-    for d in memory["last_5_decisions"]:
-        result = d.get("actual_result", "") or "Pending"
-        score = d.get("score", "") or "Pending"
-        lines.append(
-            f"  {d['date']} | Close: {d['close']} | RSI: {d['rsi']} | "
-            f"Decision: {d['decision']} | Confidence: {d['confidence']}% | "
-            f"Result: {result} | Score: {score}"
-        )
-
-    return "\n".join(lines)
-
-# ============================================================
-# MAIN COUNCIL FUNCTION
+# MAIN
 # ============================================================
 def run_council(symbol):
     print(f"\n{'='*50}")
@@ -490,81 +477,72 @@ def run_council(symbol):
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"{'='*50}")
 
-    protocol_file = "council_protocol.txt"
-    if os.path.exists(protocol_file):
-        with open(protocol_file, "r", encoding="utf-8") as f:
-            protocol = f.read()
-    else:
-        protocol = "Advisory Council v2.1 — enforce all roles strictly."
-
-    print(f"📡 Fetching live data for {symbol}...")
+    print(f"📡 Fetching data for {symbol}...")
     data = fetch_live_data(symbol)
     if not data:
-        print(f"❌ Failed to fetch data for {symbol}")
+        print(f"❌ Failed to fetch {symbol}")
         return None
 
-    print(f"✅ Close: ${data['close']} | RSI: {data['rsi']} | MACD: {data['macd_cross']} | Vol: {data['volume_ratio']}x")
+    print(f"✅ Close: ${data['close']} | RSI: {data['rsi']} | MACD: {data['macd_cross']}")
+    print(f"   Trend: {data['trend']} | Edge: {data['edge_score']} | Z: {data['z_score']}")
 
-    # Load institutional memory
     memory = load_memory(symbol)
     memory_text = format_memory(memory)
     if memory:
         print(f"📚 Memory: {memory['total_sessions']} sessions | Win rate: {memory['win_rate']}%")
     else:
-        print(f"📚 No previous memory for {symbol} — first session")
+        print(f"📚 First session for {symbol}")
 
     stock_news = fetch_stock_news(symbol)
     macro_news = fetch_macro_news()
 
-    print("\n[Phase 1] Analyst (Claude)...")
-    analyst_output = run_analyst(symbol, data, protocol, memory_text)
-    print("✅ Analyst done.")
+    print("[Phase 1] Analyst (Claude)...")
+    analyst = run_analyst(symbol, data, memory_text)
+    print(f"✅ TechnicalScore: {analyst.get('TechnicalScore', '?')}")
 
     print("[Phase 2] Market Intelligence (GPT)...")
-    market_output = run_market_intelligence(symbol, stock_news, macro_news, protocol, memory_text)
-    print("✅ Market Intelligence done.")
+    market_intel = run_market_intelligence(symbol, data, stock_news, macro_news, memory_text)
+    print(f"✅ MacroScore: {market_intel.get('MacroScore', '?')}")
 
-    print("[Phase 3] Critic (GPT)...")
-    critic_output = run_critic(symbol, analyst_output, market_output, protocol)
-    print("✅ Critic done.")
+    print("[Phase 3] Critic (GPT — Scoring Only)...")
+    critic = run_critic(symbol, analyst, market_intel)
+    print(f"✅ ConsistencyScore: {critic.get('ConsistencyScore', '?')}")
 
-    print("[Phase 4] Decision Engine (GPT)...")
-    decision_output = run_decision_engine(symbol, analyst_output, market_output, critic_output, protocol)
-    print("✅ Decision Engine done.")
+    print("[Phase 4] Decision Engine...")
+    decision = run_decision(symbol, data, analyst, market_intel, critic)
 
-    log = save_shadow_log(symbol, analyst_output, market_output, critic_output, decision_output, data)
+    log = save_shadow_log(symbol, data, decision)
 
     print(f"\n{'='*50}")
     print(f"COUNCIL DECISION — {symbol}")
     print(f"{'='*50}")
-    print(f"Close:      ${data['close']}")
-    print(f"RSI:        {data['rsi']}")
-    print(f"MACD:       {data['macd_cross']}")
-    print(f"Weekly:     {data['weekly_trend']}")
-    print(f"Verdict:    {log['critic_verdict']}")
-    print(f"Decision:   {log['decision']}")
-    print(f"Confidence: {log['confidence']}%")
-    print(f"Entry:      {log['entry']}")
-    print(f"Stop:       {log['stop']}")
-    print(f"Target:     {log['target']}")
-    print(f"R/R:        {log['rr']}")
+    print(f"Edge Score:   {data['edge_score']}/100")
+    print(f"Tech Score:   {analyst.get('TechnicalScore','?')}/100")
+    print(f"Macro Score:  {market_intel.get('MacroScore','?')}/100")
+    print(f"Consistency:  {critic.get('ConsistencyScore','?')}/100")
+    print(f"Final Score:  {decision['FinalScore']}/100")
+    print(f"─────────────────────────────────")
+    print(f"Decision:     {decision['Decision']}")
+    print(f"Confidence:   {decision['Confidence']}%")
+    print(f"Entry:        ${decision['Plan']['Entry']}")
+    print(f"Stop:         ${decision['Plan']['Stop']}")
+    print(f"Target 1:     ${decision['Plan']['Target1']}")
+    print(f"Target 2:     ${decision['Plan']['Target2']}")
+    print(f"R/R:          {decision['Plan']['RiskReward']}")
+    print(f"Trend:        {data['trend']}")
     print(f"{'='*50}\n")
 
     return {
         "symbol": symbol,
         "data": data,
-        "analyst": analyst_output,
-        "market": market_output,
-        "critic": critic_output,
-        "decision": decision_output,
-        "summary": log
+        "analyst": analyst,
+        "market_intel": market_intel,
+        "critic": critic,
+        "decision": decision,
+        "log": log
     }
 
-# ============================================================
-# RUN
-# ============================================================
 if __name__ == "__main__":
     stocks = ["NVDA", "MSFT", "AMZN", "ARM", "PLUG", "QCOM"]
     for stock in stocks:
         run_council(stock)
-        print(f"Completed: {stock}")
