@@ -99,7 +99,21 @@ def fetch_live_data(symbol):
         avg_vol = round(hist["Volume"].rolling(20).mean().iloc[-1])
         vol_ratio = round(hist["Volume"].iloc[-1] / avg_vol, 2)
 
-        weekly_trend = "uptrend" if hist_weekly["Close"].iloc[-1] > hist_weekly["Close"].iloc[-4] else "downtrend"
+        # Trend — 3 layers (short/medium/long)
+        short_trend = "uptrend" if hist["Close"].iloc[-1] > ema20 else "downtrend"
+        medium_trend = "uptrend" if hist["Close"].iloc[-1] > sma50 else "downtrend"
+        weekly_sma20 = hist_weekly["Close"].rolling(20).mean().iloc[-1]
+        long_trend = "uptrend" if hist_weekly["Close"].iloc[-1] > weekly_sma20 else "downtrend"
+
+        up_count = [short_trend, medium_trend, long_trend].count("uptrend")
+        if up_count == 3:
+            weekly_trend = "strong_uptrend"
+        elif up_count == 2:
+            weekly_trend = "weak_uptrend"
+        elif up_count == 1:
+            weekly_trend = "weak_downtrend"
+        else:
+            weekly_trend = "strong_downtrend"
 
         high_52w = round(hist["Close"].max(), 2)
         low_52w = round(hist["Close"].min(), 2)
