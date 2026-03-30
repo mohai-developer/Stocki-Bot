@@ -1,990 +1,570 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0d1117">
-<title>Stocki Bot</title>
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
-<link rel="manifest" href="manifest.json">
+import os
+import json
+import re
+import yfinance as yf
+import pandas as pd
+from datetime import datetime
+from dotenv import load_dotenv
+import requests
+import anthropic
 
-<style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:#0d1117;font-family:'Segoe UI',sans-serif;color:#e6edf3;min-height:100vh;overflow-x:hidden}
-input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
-.topbar{background:#161b22;border-bottom:1px solid #30363d;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.logo{display:flex;flex-direction:column}
-.logo-name{font-size:16px;font-weight:700;color:#58a6ff;letter-spacing:0.5px}
-.logo-sub{font-size:9px;color:#8b949e;letter-spacing:0.05em}
-.lang-toggle{display:flex;gap:4px}
-.lang-btn{background:transparent;border:1px solid #30363d;color:#8b949e;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer}
-.lang-btn.active{background:#1f6feb;border-color:#1f6feb;color:#fff}
-.login-wrap{padding:2rem 1rem;display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 50px)}
-.login-card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:2rem;width:100%;max-width:340px}
-.login-logo{text-align:center;margin-bottom:0.5rem}
-.login-title{font-size:22px;font-weight:700;color:#58a6ff;text-align:center;margin-bottom:2px}
-.login-powered{font-size:11px;color:#8b949e;text-align:center;margin-bottom:1.25rem;letter-spacing:0.05em}
-.field-label{font-size:12px;color:#8b949e;margin-bottom:6px;display:block}
-.field-input{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:11px 14px;color:#e6edf3;font-size:14px;margin-bottom:1rem;transition:border-color 0.2s;letter-spacing:0.1em}
-.field-input:focus{border-color:#1f6feb}
-.btn-primary{width:100%;background:#1f6feb;border:none;color:#fff;font-size:14px;font-weight:600;padding:11px;border-radius:8px;cursor:pointer}
-.btn-primary:active{opacity:0.8}
-.error-msg{color:#f85149;font-size:12px;text-align:center;margin-top:8px;display:none}
-.disclaimer{margin-top:1.25rem;padding-top:1rem;border-top:1px solid #30363d;font-size:10px;color:#8b949e;text-align:center;line-height:1.6}
-.dashboard{padding:1rem 16px 80px;display:none}
-.page{display:none}
-.page.active{display:block}
-.dash-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-top:0.5rem}
-.dash-title{font-size:18px;font-weight:600}
-.badge{font-size:11px;padding:3px 10px;border-radius:20px}
-.admin-badge{background:#1f3a5f;color:#58a6ff;border:1px solid #1f6feb}
-.user-badge{background:#1a2e1a;color:#3fb950;border:1px solid #238636}
-.expired-badge{background:#2d0f0f;color:#f85149;border:1px solid #da3633}
-.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem}
-.stat-card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:0.875rem}
-.stat-label{font-size:11px;color:#8b949e;margin-bottom:4px}
-.stat-value{font-size:22px;font-weight:600}
-.green{color:#3fb950}
-.red{color:#f85149}
-.yellow{color:#d29922}
-.blue{color:#58a6ff}
-.section-title{font-size:12px;color:#8b949e;font-weight:500;margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:0.05em}
-.stock-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:1.25rem}
-.stock-card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:0.875rem;cursor:pointer;transition:border-color 0.2s}
-.stock-card:active{border-color:#1f6feb}
-.stock-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.stock-symbol{font-size:15px;font-weight:600}
-.signal{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500}
-.signal-buy{background:#0d2818;color:#3fb950;border:1px solid #238636}
-.signal-wait{background:#2d1b00;color:#d29922;border:1px solid #9e6a03}
-.signal-exit{background:#2d0f0f;color:#f85149;border:1px solid #da3633}
-.stock-price{font-size:13px;color:#e6edf3;margin-bottom:2px}
-.stock-change{font-size:12px;margin-bottom:6px}
-.conf-bar{background:#21262d;border-radius:4px;height:3px;margin-bottom:3px}
-.conf-fill{height:3px;border-radius:4px}
-.conf-blue{background:#1f6feb}
-.conf-yellow{background:#d29922}
-.conf-red{background:#da3633}
-.conf-label{font-size:10px;color:#8b949e}
-.days-badge{font-size:10px;color:#58a6ff;margin-top:4px}
-.analyze-card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:1.25rem}
-.input-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-.mini-label{font-size:11px;color:#8b949e;margin-bottom:4px;display:block}
-.mini-input{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:9px 10px;color:#e6edf3;font-size:13px;transition:border-color 0.2s}
-.mini-input:focus{border-color:#1f6feb}
-.mini-select{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:9px 10px;color:#e6edf3;font-size:13px}
-.report-toggle{display:flex;gap:6px;margin-bottom:10px}
-.toggle-btn{flex:1;background:#0d1117;border:1px solid #30363d;color:#8b949e;font-size:12px;padding:7px;border-radius:6px;cursor:pointer;text-align:center;transition:all 0.2s}
-.toggle-btn.active{background:#1f3a5f;border-color:#1f6feb;color:#58a6ff}
-.btn-analyze{width:100%;background:#238636;border:none;color:#fff;font-size:14px;font-weight:500;padding:10px;border-radius:8px;cursor:pointer}
-.btn-analyze:active{opacity:0.8}
-.admin-card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:1.25rem}
-.admin-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
-.admin-input{flex:1;min-width:80px;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px 10px;color:#e6edf3;font-size:12px}
-.admin-input:focus{border-color:#1f6feb}
-.admin-select{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px 10px;color:#e6edf3;font-size:12px}
-.btn-add{background:#1f3a5f;border:1px solid #1f6feb;color:#58a6ff;font-size:12px;padding:8px 12px;border-radius:6px;cursor:pointer;white-space:nowrap}
-.btn-generate{background:#0d2818;border:1px solid #238636;color:#3fb950;font-size:11px;padding:6px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
-.list-items{display:flex;flex-direction:column;gap:6px}
-.list-item{background:#0d1117;border-radius:8px;padding:10px 12px;border:1px solid #21262d}
-.item-row{display:flex;justify-content:space-between;align-items:center}
-.item-name{font-size:13px;color:#e6edf3;font-weight:500}
-.item-sub{font-size:11px;color:#8b949e;font-family:monospace;margin-top:2px}
-.item-expiry{font-size:11px;margin-top:4px}
-.expiry-ok{color:#3fb950}
-.expiry-warn{color:#d29922}
-.expiry-expired{color:#f85149}
-.expiry-unlimited{color:#58a6ff}
-.btn-remove{background:transparent;border:1px solid #da3633;color:#f85149;font-size:11px;padding:4px 8px;border-radius:4px;cursor:pointer}
-.btn-renew{background:transparent;border:1px solid #238636;color:#3fb950;font-size:11px;padding:4px 8px;border-radius:4px;cursor:pointer;margin-right:4px}
-.code-box{display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px 10px;margin-bottom:8px}
-.code-text{font-family:monospace;font-size:12px;color:#58a6ff;flex:1;word-break:break-all}
-.btn-copy{background:transparent;border:1px solid #30363d;color:#8b949e;font-size:11px;padding:3px 8px;border-radius:4px;cursor:pointer}
-.alert-card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:10px}
-.alert-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.alert-symbol{font-size:14px;font-weight:600}
-.alert-type{font-size:11px;padding:2px 8px;border-radius:20px;background:#1f3a5f;color:#58a6ff;border:1px solid #1f6feb}
-.alert-detail{font-size:12px;color:#8b949e;margin-top:3px}
-.btn-del-alert{background:transparent;border:none;color:#8b949e;font-size:16px;cursor:pointer}
-.bottom-nav{background:#161b22;border-top:1px solid #30363d;display:flex;padding:8px 0 12px;position:fixed;bottom:0;left:0;right:0;z-index:100}
-.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:4px 0}
-.nav-icon{font-size:20px}
-.nav-label{font-size:10px;color:#8b949e}
-.nav-item.active .nav-label{color:#58a6ff}
-.toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#238636;color:#fff;font-size:13px;padding:10px 20px;border-radius:8px;z-index:999;display:none;white-space:nowrap}
-.expired-overlay{background:#2d0f0f;border:1px solid #da3633;border-radius:10px;padding:2rem;text-align:center;margin:2rem 1rem}
-.expired-icon{font-size:40px;margin-bottom:0.75rem}
-.expired-title{font-size:16px;font-weight:600;color:#f85149;margin-bottom:6px}
-.expired-sub{font-size:13px;color:#8b949e}
-.divider{border:none;border-top:1px solid #30363d;margin:0.875rem 0}
-</style>
-</head>
-<body dir="rtl">
+load_dotenv()
 
-<div class="toast" id="toast"></div>
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
-<div id="installBanner" style="display:none;background:#1f3a5f;border-bottom:1px solid #1f6feb;padding:10px 16px">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-    <div style="font-size:13px;color:#e6edf3;font-weight:500">📲 أضف التطبيق للشاشة الرئيسية</div>
-    <button onclick="document.getElementById('installBanner').style.display='none'" style="background:transparent;border:none;color:#8b949e;font-size:16px;cursor:pointer">✕</button>
-  </div>
-  <div id="iosInstructions" style="display:none;font-size:12px;color:#8b949e;line-height:1.8">
-    اضغط على <strong style="color:#58a6ff">زر المشاركة</strong> ثم اختر <strong style="color:#58a6ff">إضافة للشاشة الرئيسية</strong>
-  </div>
-  <div id="androidInstructions" style="display:none">
-    <button onclick="installApp()" style="width:100%;background:#1f6feb;border:none;color:#fff;font-size:13px;font-weight:500;padding:8px;border-radius:6px;cursor:pointer">تثبيت التطبيق</button>
-  </div>
-</div>
+# ============================================================
+# HELPERS
+# ============================================================
+def clean_json(text):
+    text = text.strip()
+    text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"```", "", text)
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    if start >= 0 and end > start:
+        text = text[start:end]
+    return text
 
+def safe_json_load(text, fallback="{}"):
+    try:
+        if isinstance(text, dict):
+            return text
+        if isinstance(text, str):
+            return json.loads(clean_json(text))
+        return json.loads(fallback)
+    except Exception as e:
+        print(f"⚠️ JSON parse fallback: {e}")
+        return json.loads(fallback)
 
-<div class="topbar">
-  <div class="logo" style="display:flex;flex-direction:row;align-items:center">
-    <img src="logo.png" style="width:32px;height:32px;object-fit:contain;margin-right:8px" alt="logo"><div><div class="logo-name">Stocki Bot</div><div class="logo-sub">POWERED BY AI</div></div>
-  </div>
-  <div class="lang-toggle">
-    <button class="lang-btn" onclick="setLang('en',this)">EN</button>
-    <button class="lang-btn active" onclick="setLang('ar',this)">ع</button>
-  </div>
-</div>
-
-<!-- LOGIN -->
-<div class="login-wrap" id="loginWrap">
-  <div class="login-card">
-    <div class="login-logo"><img src="logo.png" style="width:120px;height:120px;object-fit:contain" alt="Stocki Bot"></div>
-    <div class="login-title">Stocki Bot</div>
-    <div class="login-powered" id="loginPowered">AI-Powered Stock Analysis</div>
-    <label class="field-label" id="loginLabel">Access Code</label>
-    <input class="field-input" id="codeInput" type="password" placeholder="••••••••••" maxlength="12" />
-    <button class="btn-primary" onclick="login()" id="loginBtn">Sign In</button>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
-      <input type="checkbox" id="rememberMe" style="width:16px;height:16px;cursor:pointer">
-      <label for="rememberMe" style="font-size:12px;color:#8b949e;cursor:pointer" id="rememberLabel">تذكرني</label>
-    </div>
-    <div class="error-msg" id="errorMsg">Invalid access code</div>
-    <div class="disclaimer" id="disclaimer">
-      This tool is for informational purposes only and does not constitute investment advice. Trading involves risk, and all investment decisions are solely the user's responsibility.
-    </div>
-  </div>
-</div>
-
-<!-- MAIN APP -->
-<div id="mainApp" style="display:none">
-
-  <!-- DASHBOARD -->
-  <div class="page active" id="pageDashboard">
-    <div style="padding:1rem 16px 80px">
-      <div class="dash-header">
-        <div class="dash-title" id="dashTitle">Dashboard</div>
-        <div class="badge admin-badge" id="roleBadge">Admin</div>
-      </div>
-      <div class="stats-row">
-        <div class="stat-card">
-          <div class="stat-label" id="statLabelStocks">Stocks</div>
-          <div class="stat-value blue" id="statStocks">6</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label" id="statLabelBuy">Buy signals</div>
-          <div class="stat-value green" id="statBuy">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label" id="statLabelUsers">Users</div>
-          <div class="stat-value" id="statUsers">0</div>
-        </div>
-      </div>
-      <div class="section-title" id="watchlistTitle">Watchlist — tap to analyze</div>
-      <div class="stock-grid" id="stockGrid"></div>
-    </div>
-  </div>
-
-  <!-- ANALYZE -->
-  <div class="page" id="pageAnalyze">
-    <div style="padding:1rem 16px 80px">
-
-      <div class="dash-header">
-        <div class="dash-title" id="analyzeTitle">Analyze</div>
-      </div>
-
-      <div class="analyze-card">
-        <div style="margin-bottom:12px">
-          <label class="mini-label">الرمز</label>
-          <input class="mini-input" id="analyzeSymbol" placeholder="مثال: PLUG" style="text-transform:uppercase" />
-        </div>
-
-        <div class="section-title" style="margin-bottom:8px">نوع التحليل</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-          <button id="btnGeneral" onclick="setAnalysisType('general',this)" style="background:#1f6feb;border:none;color:#fff;font-size:13px;font-weight:500;padding:10px;border-radius:8px;cursor:pointer">📊 تحليل عام</button>
-          <button id="btnPosition" onclick="setAnalysisType('position',this)" style="background:#0d1117;border:1px solid #30363d;color:#8b949e;font-size:13px;font-weight:500;padding:10px;border-radius:8px;cursor:pointer">💼 تحليل صفقة</button>
-        </div>
-
-        <div id="generalOptions" style="margin-bottom:12px">
-          <div class="section-title" style="margin-bottom:8px">نوع التقرير</div>
-          <div class="report-toggle">
-            <div class="toggle-btn active" onclick="setReport('full',this)">مفصل</div>
-            <div class="toggle-btn" onclick="setReport('summary',this)">مختصر</div>
-          </div>
-        </div>
-
-        <div id="positionOptions" style="display:none;margin-bottom:12px">
-          <label class="mini-label">سعر الدخول</label>
-          <input class="mini-input" id="entryPrice" placeholder="0.00" type="number" />
-        </div>
-
-        <button class="btn-analyze" onclick="sendAnalysis()">تحليل</button>
-        <button class="btn-analyze" onclick="sendCouncil()" style="background:#238636;margin-top:8px">🏛️ تحليل المجلس</button>
-      </div>
-
-      <div id="analysisResult" style="display:none;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:1.25rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
-          <div style="font-size:14px;font-weight:600;color:#58a6ff" id="resultTitle">تحليل</div>
-          <div style="font-size:11px;color:#8b949e" id="resultTime"></div>
-        </div>
-        <div id="resultLoading" style="text-align:center;padding:2rem;color:#8b949e;display:none">
-          <div style="font-size:24px;margin-bottom:0.5rem">⏳</div>
-          <div style="font-size:13px">جاري التحليل...</div>
-        </div>
-        <div id="resultContent" style="font-size:13px;color:#e6edf3;line-height:1.8;white-space:pre-wrap"></div>
-      </div>
-
-    </div>
-  </div>
-
-
-  <!-- ALERTS -->
-  <div class="page" id="pageAlerts">
-    <div style="padding:1rem 16px 80px">
-      <div class="dash-header">
-        <div class="dash-title" id="alertsTitle">Alerts</div>
-      </div>
-      <div class="section-title" id="addAlertTitle">Add new alert</div>
-      <div class="analyze-card">
-        <div class="input-row">
-          <div>
-            <label class="mini-label" id="alertLabelSym">Symbol</label>
-            <input class="mini-input" id="alertSymbol" placeholder="PLUG" style="text-transform:uppercase" />
-          </div>
-          <div>
-            <label class="mini-label" id="alertLabelEntry">Entry price</label>
-            <input class="mini-input" id="alertEntry" placeholder="2.31" type="number" />
-          </div>
-        </div>
-        <div class="input-row">
-          <div>
-            <label class="mini-label" id="alertLabelTarget">Target price</label>
-            <input class="mini-input" id="alertPrice" placeholder="2.60" type="number" />
-          </div>
-          <div>
-            <label class="mini-label" id="alertLabelStop">Stop price</label>
-            <input class="mini-input" id="alertStop" placeholder="1.90" type="number" />
-          </div>
-        </div>
-        <button class="btn-analyze" onclick="addAlert()" id="btnAddAlert">Add Alert</button>
-      </div>
-      <div class="section-title" id="activeAlertsTitle">Active alerts</div>
-      <div id="alertsList"></div>
-    </div>
-  </div>
-
-  <!-- SETTINGS -->
-  <div class="page" id="pageSettings">
-    <div style="padding:1rem 16px 80px">
-      <div class="dash-header">
-        <div class="dash-title" id="settingsTitle">Settings</div>
-      </div>
-
-      <!-- ADMIN ONLY -->
-      <div id="adminSection" style="display:none">
-
-        <div class="section-title" id="manageWatchTitle">Manage watchlist</div>
-        <div class="admin-card">
-          <div class="admin-row">
-            <input class="admin-input" id="newStock" placeholder="Symbol e.g. TSLA" style="text-transform:uppercase;flex:1" />
-            <button class="btn-add" onclick="addStock()" id="btnAddStock">Add</button>
-          </div>
-          <div class="list-items" id="stockList"></div>
-        </div>
-
-        <div class="section-title" id="manageUsersTitle">Manage users</div>
-        <div class="admin-card">
-          <div class="admin-row">
-            <input class="admin-input" id="newUserName" placeholder="Name" style="flex:1" />
-            <select class="admin-select" id="newUserDuration">
-              <option value="7">7 days</option>
-              <option value="30" selected>30 days</option>
-              <option value="90">90 days</option>
-              <option value="365">1 year</option>
-              <option value="0">Unlimited</option>
-            </select>
-          </div>
-          <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
-            <input class="admin-input" id="newUserCode" placeholder="Auto-generated code" readonly style="flex:1;font-family:monospace;font-size:12px;color:#58a6ff" />
-            <button class="btn-generate" onclick="generateCode()" id="btnGenerate">Generate</button>
-            <button class="btn-add" onclick="addUser()" id="btnAddUser">Add</button>
-          </div>
-          <div class="list-items" id="userList"></div>
-        </div>
-
-      </div>
-
-      <div class="section-title" id="accountTitle">Account</div>
-      <div class="admin-card">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-size:14px;font-weight:500" id="accountName">Admin</div>
-            <div style="font-size:11px;color:#8b949e" id="accountRole">Administrator</div>
-            <div style="font-size:11px;color:#8b949e;margin-top:2px" id="accountExpiry"></div>
-          </div>
-          <button class="btn-remove" onclick="logout()" id="btnLogout">Sign out</button>
-        </div>
-      </div>
-
-      <div class="disclaimer" style="padding:1rem;background:#161b22;border-radius:10px;border:1px solid #30363d" id="settingsDisclaimer">
-        This tool is for informational purposes only and does not constitute investment advice. Trading involves risk, and all investment decisions are solely the user's responsibility.
-      </div>
-
-    </div>
-  </div>
-
-  <!-- BOTTOM NAV -->
-  <div class="bottom-nav">
-    <div class="nav-item active" onclick="showPage('Dashboard',this)">
-      <div class="nav-icon">📊</div>
-      <div class="nav-label" id="navDashboard">Dashboard</div>
-    </div>
-    <div class="nav-item" onclick="showPage('Analyze',this)">
-      <div class="nav-icon">🔍</div>
-      <div class="nav-label" id="navAnalyze">Analyze</div>
-    </div>
-    <div class="nav-item" onclick="showPage('Alerts',this)">
-      <div class="nav-icon">🔔</div>
-      <div class="nav-label" id="navAlerts">Alerts</div>
-    </div>
-    <div class="nav-item" onclick="showPage('Settings',this)">
-      <div class="nav-icon">⚙️</div>
-      <div class="nav-label" id="navSettings">Settings</div>
-    </div>
-  </div>
-
-</div>
-
-<script>
-var lang='ar';
-var API_URL = 'https://web-production-21f3b.up.railway.app';
-var currentUser=null;
-var reportType='full';
-
-var translations={
-  en:{
-    loginPowered:'AI-Powered Stock Analysis',
-    loginLabel:'Access Code',
-    loginBtn:'Sign In',
-    errorMsg:'Invalid access code',
-    disclaimer:"This tool is for informational purposes only and does not constitute investment advice. Trading involves risk, and all investment decisions are solely the user's responsibility.",
-    dashTitle:'Dashboard',
-    statLabelStocks:'Stocks',statLabelBuy:'Buy signals',statLabelUsers:'Users',
-    watchlistTitle:'Watchlist — tap to analyze',
-    analyzeTitle:'Analyze',analyzeSubTitle:'Stock details',
-    labelSymbol:'Symbol',labelEntry:'Entry price',labelTarget:'Target',labelStop:'Stop loss',
-    reportTypeTitle:'Report type',btnFull:'Full Report',btnSummary:'Summary Only',
-    btnAnalyze:'Analyze — Send to Telegram',
-    alertsTitle:'Alerts',addAlertTitle:'Add new alert',
-    alertLabelSym:'Symbol',alertLabelEntry:'Entry price',alertLabelTarget:'Target price',alertLabelStop:'Stop price',
-    btnAddAlert:'Add Alert',activeAlertsTitle:'Active alerts',
-    settingsTitle:'Settings',manageWatchTitle:'Manage watchlist',
-    manageUsersTitle:'Manage users',btnAddStock:'Add',btnGenerate:'Generate',btnAddUser:'Add',
-    accountTitle:'Account',btnLogout:'Sign out',
-    navDashboard:'Dashboard',navAnalyze:'Analyze',navAlerts:'Alerts',navSettings:'Settings',
-    adminRole:'Administrator',userRole:'Member',
-    expires:'Expires',unlimited:'Unlimited',expired:'Expired',
-    daysLeft:' days left',active:'Active',
-    noAlerts:'No alerts yet',entry:'Entry',target:'Target',stop:'Stop',
-    stockAdded:'Stock added',stockExists:'Already exists',removed:'Removed',
-    userAdded:'User added',codeExists:'Code already used',
-    alertAdded:'Alert added',enterSymbol:'Enter stock symbol',
-    sending:'Sending to Telegram...',copied:'Copied!',generateFirst:'Generate code first',
-    expiredTitle:'Subscription Expired',expiredSub:'Contact admin to renew',
-    warn7:'Subscription expires in 7 days',warn3:'Subscription expires in 3 days'
-  },
-  ar:{
-    loginPowered:'تحليل الأسهم بالذكاء الاصطناعي',
-    loginLabel:'رمز الدخول',
-    loginBtn:'دخول',
-    errorMsg:'رمز غير صحيح',
-    disclaimer:'هذه الأداة للأغراض المعلوماتية فقط ولا تُعد نصيحة استثمارية. التداول ينطوي على مخاطر، وقرار الاستثمار يقع على عاتق المستخدم وحده.',
-    dashTitle:'لوحة التحكم',
-    statLabelStocks:'الأسهم',statLabelBuy:'إشارات شراء',statLabelUsers:'المستخدمون',
-    watchlistTitle:'قائمة الأسهم — اضغط للتحليل',
-    analyzeTitle:'تحليل',analyzeSubTitle:'تفاصيل السهم',
-    labelSymbol:'الرمز',labelEntry:'سعر الدخول',labelTarget:'الهدف',labelStop:'وقف الخسارة',
-    reportTypeTitle:'نوع التقرير',btnFull:'تقرير مفصل',btnSummary:'ملخص فقط',
-    btnAnalyze:'تحليل — إرسال لتيليجرام',
-    alertsTitle:'التنبيهات',addAlertTitle:'إضافة تنبيه جديد',
-    alertLabelSym:'الرمز',alertLabelEntry:'سعر دخولي',alertLabelTarget:'السعر المستهدف',alertLabelStop:'سعر الوقف',
-    btnAddAlert:'إضافة تنبيه',activeAlertsTitle:'التنبيهات النشطة',
-    settingsTitle:'الإعدادات',manageWatchTitle:'إدارة قائمة الأسهم',
-    manageUsersTitle:'إدارة المستخدمين',btnAddStock:'إضافة',btnGenerate:'توليد',btnAddUser:'إضافة',
-    accountTitle:'الحساب',btnLogout:'خروج',
-    navDashboard:'الرئيسية',navAnalyze:'تحليل',navAlerts:'تنبيهات',navSettings:'إعدادات',
-    adminRole:'مدير النظام',userRole:'مشترك',
-    expires:'ينتهي',unlimited:'مفتوح',expired:'منتهي',
-    daysLeft:' يوم متبقي',active:'نشط',
-    noAlerts:'لا توجد تنبيهات',entry:'دخول',target:'هدف',stop:'وقف',
-    stockAdded:'تمت الإضافة',stockExists:'السهم موجود',removed:'تم الحذف',
-    userAdded:'تمت إضافة المستخدم',codeExists:'الرمز مستخدم',
-    alertAdded:'تمت إضافة التنبيه',enterSymbol:'أدخل رمز السهم',
-    sending:'جاري الإرسال لتيليجرام...',copied:'تم النسخ!',generateFirst:'ولّد الرمز أولاً',
-    expiredTitle:'انتهى الاشتراك',expiredSub:'تواصل مع الأدمن للتجديد',
-    warn7:'اشتراكك ينتهي بعد 7 أيام',warn3:'اشتراكك ينتهي بعد 3 أيام'
-  }
-};
-
-var users=[
-  {name:'Admin',code:'ADM!n#2026$X',role:'admin',expiry:null},
-  {name:'Ahmed',code:'aK7#mP2x9Q',role:'user',expiry:addDays(30)},
-  {name:'Khalid',code:'Rn4&bX8!2W',role:'user',expiry:addDays(7)}
-];
-
-var stocks=[
-  {symbol:'NVDA',price:875.40,change:2.3,signal:'buy',conf:78,days:1},
-  {symbol:'MSFT',price:415.20,change:1.1,signal:'buy',conf:72,days:1},
-  {symbol:'PLUG',price:2.16,change:-0.9,signal:'wait',conf:45,days:1},
-  {symbol:'AMZN',price:192.80,change:-1.4,signal:'exit',conf:65,days:1},
-  {symbol:'ARM',price:128.50,change:0.6,signal:'wait',conf:58,days:1},
-  {symbol:'QCOM',price:165.30,change:1.8,signal:'buy',conf:70,days:1}
-];
-
-var alerts=[
-  {symbol:'PLUG',entry:2.31,target:2.60,stop:1.90}
-];
-
-function addDays(n){
-  var d=new Date();
-  d.setDate(d.getDate()+n);
-  return d.toISOString().split('T')[0];
-}
-
-function daysUntil(dateStr){
-  if(!dateStr) return null;
-  var diff=new Date(dateStr)-new Date();
-  return Math.ceil(diff/(1000*60*60*24));
-}
-
-function t(key){return translations[lang][key]||key;}
-
-function setLang(l,btn){
-  lang=l;
-  document.querySelectorAll('.lang-btn').forEach(function(b){b.classList.remove('active')});
-  btn.classList.add('active');
-  document.body.dir=l==='ar'?'rtl':'ltr';
-  applyTranslations();
-  renderAll();
-}
-
-function applyTranslations(){
-  var keys=['loginPowered','loginLabel','loginBtn','errorMsg','disclaimer',
-    'dashTitle','statLabelStocks','statLabelBuy','statLabelUsers','watchlistTitle',
-    'analyzeTitle','analyzeSubTitle','labelSymbol','labelEntry','labelTarget','labelStop',
-    'reportTypeTitle','btnFull','btnSummary','btnAnalyze',
-    'alertsTitle','addAlertTitle','alertLabelSym','alertLabelEntry','alertLabelTarget','alertLabelStop',
-    'btnAddAlert','activeAlertsTitle','settingsTitle','manageWatchTitle','manageUsersTitle',
-    'btnAddStock','btnGenerate','btnAddUser','accountTitle','btnLogout',
-    'navDashboard','navAnalyze','navAlerts','navSettings','settingsDisclaimer'];
-  keys.forEach(function(k){
-    var el=document.getElementById(k);
-    if(el) el.textContent=t(k);
-  });
-  var disc=document.getElementById('settingsDisclaimer');
-  if(disc) disc.textContent=t('disclaimer');
-}
-
-function generateCode(){
-  var chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$&';
-  var code='';
-  for(var i=0;i<10;i++) code+=chars[Math.floor(Math.random()*chars.length)];
-  document.getElementById('newUserCode').value=code;
-}
-
-function login(){
-  var remember = document.getElementById('rememberMe');
-  if(remember && remember.checked){
-    localStorage.setItem('stocki_code', document.getElementById('codeInput').value.trim());
-  } else {
-    localStorage.removeItem('stocki_code');
-  }
-  var code=document.getElementById('codeInput').value.trim();
-  var found=users.find(function(u){return u.code===code});
-  if(found){
-    if(found.role!=='admin' && found.expiry){
-      var days=daysUntil(found.expiry);
-      if(days<0){showError();return;}
+def call_gpt(prompt):
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
     }
-    currentUser=found;
-    document.getElementById('loginWrap').style.display='none';
-    document.getElementById('mainApp').style.display='block';
-    document.getElementById('roleBadge').textContent=found.role==='admin'?'Admin':found.name;
-    document.getElementById('roleBadge').className='badge '+(found.role==='admin'?'admin-badge':'user-badge');
-    document.getElementById('adminSection').style.display=found.role==='admin'?'block':'none';
-    document.getElementById('accountName').textContent=found.name;
-    document.getElementById('accountRole').textContent=found.role==='admin'?t('adminRole'):t('userRole');
-    if(found.expiry){
-      var days=daysUntil(found.expiry);
-      var expEl=document.getElementById('accountExpiry');
-      if(days<=3) expEl.textContent='⚠️ '+t('warn3');
-      else if(days<=7) expEl.textContent='⚠️ '+t('warn7');
-      else expEl.textContent=t('expires')+': '+found.expiry;
+    body = {
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 1500
     }
-    renderAll();
-    loadDashboard();
-  } else {
-    showError();
-  }
-}
+    try:
+        resp = requests.post(url, headers=headers, json=body, timeout=30)
+        data = resp.json()
+        if "choices" in data:
+            result = data["choices"][0]["message"]["content"]
+            return result
+        else:
+            print(f"GPT error: {data}")
+            return None
+    except Exception as e:
+        print(f"GPT call exception: {e}")
+        return None
 
-function showError(){
-  var err=document.getElementById('errorMsg');
-  err.textContent=t('errorMsg');
-  err.style.display='block';
-  setTimeout(function(){err.style.display='none'},3000);
-}
+# ============================================================
+# FETCH LIVE DATA
+# ============================================================
+def fetch_live_data(symbol):
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        hist = ticker.history(period="6mo", interval="1d")
+        hist_weekly = ticker.history(period="1y", interval="1wk")
 
-function logout(){
-  currentUser=null;
-  document.getElementById('loginWrap').style.display='flex';
-  document.getElementById('mainApp').style.display='none';
-  document.getElementById('codeInput').value='';
-  showPage('Dashboard',document.querySelector('.nav-item'));
-}
+        if len(hist) < 20:
+            return None
 
-function showPage(name,el){
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
-  document.getElementById('page'+name).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active')});
-  if(el) el.classList.add('active');
-}
+        delta = hist["Close"].diff()
+        gain = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
+        loss = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
+        rsi = round(100 - (100 / (1 + gain.iloc[-1] / loss.iloc[-1])), 2)
 
-function setReport(type,el){
-  reportType=type;
-  document.querySelectorAll('.report-toggle .toggle-btn').forEach(function(b){b.classList.remove('active')});
-  el.classList.add('active');
-}
+        ema12 = hist["Close"].ewm(span=12).mean()
+        ema26 = hist["Close"].ewm(span=26).mean()
+        macd = round((ema12 - ema26).iloc[-1], 4)
+        macd_signal_line = round((ema12 - ema26).ewm(span=9).mean().iloc[-1], 4)
+        macd_cross = "bullish" if macd > macd_signal_line else "bearish"
 
-function renderStockGrid(liveStocks){
-  var grid=document.getElementById('stockGrid');
-  var data=liveStocks||stocks;
-  var buyCount=0;
-  var html='';
-  for(var i=0;i<data.length;i++){
-    var s=data[i];
-    var sc=s.signal==='buy'?'signal-buy':s.signal==='exit'?'signal-exit':'signal-wait';
-    var st=s.signal==='buy'?(lang==='ar'?'شراء':'Buy'):s.signal==='exit'?(lang==='ar'?'اخرج':'Exit'):(lang==='ar'?'انتظر':'Wait');
-    var cc=s.conf>=65?'conf-blue':s.conf>=50?'conf-yellow':'conf-red';
-    var price=s.price||0;
-    var change=s.change||0;
-    var chStr=(change>=0?'+':'')+change.toFixed(2)+'%';
-    var chClass=change>=0?'green':'red';
-    if(s.signal==='buy') buyCount++;
-    var rsiHtml=s.rsi?'<div class="days-badge">RSI: '+s.rsi+'</div>':'';
-    html+='<div class="stock-card" onclick="openStock(this.dataset.sym)" data-sym="'+s.symbol+'">';
-    html+='<div class="stock-top"><div class="stock-symbol">'+s.symbol+'</div><div class="signal '+sc+'">'+st+'</div></div>';
-    html+='<div class="stock-price">$'+price.toFixed(2)+'</div>';
-    html+='<div class="stock-change '+chClass+'">'+chStr+'</div>';
-    html+='<div class="conf-bar"><div class="conf-fill '+cc+'" style="width:'+s.conf+'%"></div></div>';
-    html+='<div class="conf-label">'+(lang==='ar'?'الثقة':'Confidence')+' '+s.conf+'%</div>';
-    html+=rsiHtml+'</div>';
-  }
-  grid.innerHTML=html;
-  document.getElementById('statStocks').textContent=data.length;
-  document.getElementById('statBuy').textContent=buyCount;
-}
+        sma20 = hist["Close"].rolling(20).mean().iloc[-1]
+        std20 = hist["Close"].rolling(20).std().iloc[-1]
+        bb_upper = round(sma20 + 2 * std20, 2)
+        bb_lower = round(sma20 - 2 * std20, 2)
+        bb_position = round(((hist["Close"].iloc[-1] - bb_lower) / (bb_upper - bb_lower)) * 100, 1)
 
-function loadDashboard(){
-  var symbols=stocks.map(function(s){return s.symbol;});
-  document.getElementById('stockGrid').innerHTML='<div style="grid-column:1/-1;text-align:center;padding:2rem;color:#8b949e;font-size:13px">&#x23F3; Loading...</div>';
-  fetch(API_URL+'/dashboard',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({symbols:symbols})
-  })
-  .then(function(res){return res.json();})
-  .then(function(data){
-    if(data.status==='success'){
-      renderStockGrid(data.stocks);
-      document.getElementById('statBuy').textContent=data.buy_count;
-      document.getElementById('statStocks').textContent=data.stocks.length;
+        sma50 = round(hist["Close"].rolling(50).mean().iloc[-1], 2)
+        sma200 = round(hist["Close"].rolling(min(200, len(hist))).mean().iloc[-1], 2)
+        ema20 = round(hist["Close"].ewm(span=20).mean().iloc[-1], 2)
+
+        avg_vol = round(hist["Volume"].rolling(20).mean().iloc[-1])
+        vol_ratio = round(hist["Volume"].iloc[-1] / avg_vol, 2)
+
+        weekly_trend = "uptrend" if hist_weekly["Close"].iloc[-1] > hist_weekly["Close"].iloc[-4] else "downtrend"
+
+        high_52w = round(hist["Close"].max(), 2)
+        low_52w = round(hist["Close"].min(), 2)
+        pct_from_high = round(((hist["Close"].iloc[-1] - high_52w) / high_52w) * 100, 2)
+
+        change_1d = round(((hist["Close"].iloc[-1] - hist["Close"].iloc[-2]) / hist["Close"].iloc[-2]) * 100, 2)
+        change_1w = round(((hist["Close"].iloc[-1] - hist["Close"].iloc[-6]) / hist["Close"].iloc[-6]) * 100, 2) if len(hist) >= 6 else 0
+        change_1m = round(((hist["Close"].iloc[-1] - hist["Close"].iloc[-22]) / hist["Close"].iloc[-22]) * 100, 2) if len(hist) >= 22 else 0
+
+        return {
+            "symbol": symbol,
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "close": round(hist["Close"].iloc[-1], 2),
+            "prev_close": round(hist["Close"].iloc[-2], 2),
+            "change_1d": change_1d,
+            "change_1w": change_1w,
+            "change_1m": change_1m,
+            "pre_market": round(info.get("preMarketPrice", 0) or 0, 2),
+            "after_hours": round(info.get("postMarketPrice", 0) or 0, 2),
+            "rsi": rsi,
+            "macd": macd,
+            "macd_signal": macd_signal_line,
+            "macd_cross": macd_cross,
+            "bb_upper": bb_upper,
+            "bb_lower": bb_lower,
+            "bb_position": bb_position,
+            "sma50": sma50,
+            "sma200": sma200,
+            "ema20": ema20,
+            "volume": int(hist["Volume"].iloc[-1]),
+            "avg_volume": int(avg_vol),
+            "volume_ratio": vol_ratio,
+            "high_52w": high_52w,
+            "low_52w": low_52w,
+            "pct_from_high": pct_from_high,
+            "weekly_trend": weekly_trend,
+            "pe_ratio": round(info.get("trailingPE", 0) or 0, 2),
+            "market_cap_b": round((info.get("marketCap", 0) or 0) / 1e9, 1),
+        }
+    except Exception as e:
+        print(f"Error fetching data for {symbol}: {e}")
+        return None
+
+# ============================================================
+# FETCH NEWS
+# ============================================================
+def fetch_stock_news(symbol):
+    try:
+        ticker = yf.Ticker(symbol)
+        news = ticker.news
+        if not news:
+            return "No recent news"
+        items = []
+        for n in news[:5]:
+            title = n.get("title", "")
+            publisher = n.get("publisher", "")
+            items.append(f"- {title} ({publisher})")
+        return "\n".join(items)
+    except:
+        return "Could not fetch news"
+
+def fetch_macro_news():
+    try:
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "apiKey": NEWS_API_KEY,
+            "q": "Fed interest rates OR inflation OR geopolitical OR trade war OR recession",
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": 5
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        data = resp.json()
+        if data.get("status") != "ok":
+            return "Could not fetch macro news"
+        items = []
+        for a in data.get("articles", [])[:5]:
+            items.append(f"- {a.get('title','')} ({a.get('source',{}).get('name','')})")
+        return "\n".join(items)
+    except:
+        return "Could not fetch macro news"
+
+# ============================================================
+# PHASE 1 — ANALYST (Claude)
+# ============================================================
+def run_analyst(symbol, data, protocol, memory_text=""):
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    prompt = f"""
+{protocol}
+
+You are now acting as the ANALYST role only.
+Analyze {symbol} using the provided daily data.
+Output ONLY the [Analyst Output] JSON section.
+Be precise with numbers. No vague statements.
+
+INSTITUTIONAL MEMORY (use this to improve your analysis):
+{memory_text}
+
+LIVE DATA:
+{json.dumps(data, indent=2)}
+
+Respond ONLY with valid JSON in the [Analyst Output] format defined in the protocol.
+"""
+    msg = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return msg.content[0].text
+
+# ============================================================
+# PHASE 2 — MARKET INTELLIGENCE (GPT)
+# ============================================================
+def run_market_intelligence(symbol, stock_news, macro_news, protocol, memory_text=""):
+    prompt = f"""
+{protocol}
+
+You are now acting as the MARKET INTELLIGENCE role only.
+Analyze macro environment and news impact for {symbol}.
+Output ONLY the [Market Intelligence Output] JSON section.
+
+INSTITUTIONAL MEMORY:
+{memory_text}
+
+STOCK NEWS:
+{stock_news}
+
+MACRO NEWS:
+{macro_news}
+
+Respond ONLY with valid JSON in the [Market Intelligence Output] format defined in the protocol.
+"""
+    result = call_gpt(prompt)
+    if result:
+        return result
+    return f'{{"Role":"Market Intelligence","Ticker":"{symbol}","MarketBias":"Unknown","ImpactScore":0,"KeyCatalysts":["API error"],"MacroFactors":[],"Notes":"API error"}}'
+
+# ============================================================
+# PHASE 3 — CRITIC (GPT)
+# ============================================================
+def run_critic(symbol, analyst_output, market_output, protocol):
+    prompt = f"""
+{protocol}
+
+You are now acting as the CRITIC role only.
+Evaluate the Analyst and Market Intelligence outputs for {symbol}.
+
+You MUST respond with ONLY this exact JSON structure, no extra nesting:
+{{
+  "Role": "Critic",
+  "Ticker": "{symbol}",
+  "EarlyEntryJustified": true or false,
+  "ExitTimingValid": true or false,
+  "IssuesFound": ["issue1", "issue2"],
+  "Contradictions": ["contradiction1"],
+  "CriticVerdict": "Pass" or "Conditional" or "Reject",
+  "VerdictReason": "reason here"
+}}
+
+ANALYST OUTPUT:
+{analyst_output}
+
+MARKET INTELLIGENCE OUTPUT:
+{market_output}
+
+Respond ONLY with the JSON above. No markdown, no extra text, no nesting.
+"""
+    result = call_gpt(prompt)
+    if result:
+        return result
+    return '{"Role":"Critic","EarlyEntryJustified":false,"ExitTimingValid":false,"IssuesFound":["API error"],"Contradictions":[],"CriticVerdict":"Reject","VerdictReason":"API error"}'
+
+# ============================================================
+# PHASE 4 — DECISION ENGINE (GPT)
+# ============================================================
+def run_decision_engine(symbol, analyst_output, market_output, critic_output, protocol):
+    prompt = f"""
+{protocol}
+
+You are now acting as the DECISION ENGINE role only.
+Make the final trading decision for {symbol}.
+
+STRICT RULES:
+- This system is for LONG positions ONLY (buying stocks or call options)
+- SHORT selling is strictly FORBIDDEN
+- If the outlook is bearish, the decision must be "No Trade" not a short position
+- Entry price must always be BELOW or EQUAL to current price for long entries
+- Target price must always be ABOVE entry price
+
+You MUST respond with ONLY this exact JSON structure, no extra nesting:
+{{
+  "Role": "Decision Engine",
+  "Ticker": "{symbol}",
+  "InstrumentType": "Stock" or "Call Option" or "Put Option" or "No Trade",
+  "InstrumentReason": "reason here",
+  "TradePlan": {{
+    "Entry": 0,
+    "Stop": 0,
+    "TargetPartial": 0,
+    "TargetFull": 0,
+    "TrailingStop": "description",
+    "RiskReward": "1:X"
+  }},
+  "ConfidenceScore": 0,
+  "Decision": "Execute" or "Abstain" or "No Trade",
+  "AbstentionTriggered": false,
+  "MemoryLog": "summary here"
+}}
+
+ANALYST OUTPUT:
+{analyst_output}
+
+MARKET INTELLIGENCE OUTPUT:
+{market_output}
+
+CRITIC OUTPUT:
+{critic_output}
+
+Respond ONLY with the JSON above. No markdown, no extra text, no nesting.
+"""
+    result = call_gpt(prompt)
+    if result:
+        return result
+    return '{"Role":"Decision Engine","Ticker":"","InstrumentType":"No Trade","InstrumentReason":"API error","TradePlan":{"Entry":"N/A","Stop":"N/A","TargetPartial":"N/A","TargetFull":"N/A","TrailingStop":"N/A","RiskReward":"N/A"},"ConfidenceScore":0,"Decision":"No Trade","AbstentionTriggered":false}'
+
+# ============================================================
+# SAVE SHADOW LOG
+# ============================================================
+def save_shadow_log(symbol, analyst, market, critic, decision, data):
+    log_file = "shadow_log.csv"
+
+    critic_raw = safe_json_load(critic)
+    decision_raw = safe_json_load(decision)
+
+    # Handle nested: {"Critic Output": {...}} or flat {"CriticVerdict": ...}
+    critic_json = critic_raw.get("Critic Output", critic_raw)
+    decision_json = decision_raw.get("Decision Output", decision_raw)
+
+    verdict = (
+        critic_json.get("CriticVerdict") or
+        critic_json.get("verdict") or
+        critic_json.get("Verdict") or
+        "Unknown"
+    )
+
+    final_decision = (
+        decision_json.get("Decision") or
+        decision_json.get("trading_decision") or
+        decision_json.get("decision") or
+        "Unknown"
+    )
+
+    confidence = (
+        decision_json.get("ConfidenceScore") or
+        decision_json.get("confidence_score") or
+        decision_json.get("confidence") or
+        0
+    )
+
+    trade_plan = (
+        decision_json.get("TradePlan") or
+        decision_json.get("trade_plan") or
+        decision_json.get("trading_plan") or
+        {}
+    )
+
+    entry = trade_plan.get("Entry") or trade_plan.get("entry") or "N/A"
+    stop = trade_plan.get("Stop") or trade_plan.get("stop") or "N/A"
+    target = trade_plan.get("TargetFull") or trade_plan.get("target") or trade_plan.get("Target") or "N/A"
+    rr = trade_plan.get("RiskReward") or trade_plan.get("risk_reward") or "N/A"
+
+    row = {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "symbol": symbol,
+        "close": data.get("close", 0),
+        "rsi": data.get("rsi", 0),
+        "macd_cross": data.get("macd_cross", ""),
+        "volume_ratio": data.get("volume_ratio", 0),
+        "weekly_trend": data.get("weekly_trend", ""),
+        "critic_verdict": verdict,
+        "decision": final_decision,
+        "confidence": confidence,
+        "entry": entry,
+        "stop": stop,
+        "target": target,
+        "rr": rr,
+        "actual_result": "",
+        "score": ""
     }
-  })
-  .catch(function(err){
-    console.error('Dashboard error:',err);
-    renderStockGrid();
-  });
-}
+
+    df_new = pd.DataFrame([row])
+    if os.path.exists(log_file):
+        df_existing = pd.read_csv(log_file)
+        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+    else:
+        df_combined = df_new
+
+    df_combined.to_csv(log_file, index=False)
+    print(f"✅ Shadow log saved for {symbol}")
+    return row
 
 
-function renderStockList(){
-  var list=document.getElementById('stockList');
-  if(!list) return;
-  list.innerHTML=stocks.map(function(s,i){
-    return '<div class="list-item">'+
-      '<div class="item-row">'+
-        '<div><div class="item-name">'+s.symbol+'</div><div class="item-sub">'+s.days+(lang==='ar'?' يوم':' days')+'</div></div>'+
-        '<button class="btn-remove" onclick="removeStock('+i+')">'+t('removed').split('')[0]+'✕</button>'+
-      '</div>'+
-    '</div>';
-  }).join('');
-}
+# ============================================================
+# INSTITUTIONAL MEMORY LAYER
+# ============================================================
+def load_memory(symbol, log_file="shadow_log.csv"):
+    """Load last 5 decisions for symbol and calculate accuracy"""
+    if not os.path.exists(log_file):
+        return None
 
-function renderUserList(){
-  var list=document.getElementById('userList');
-  if(!list) return;
-  var nonAdmins=users.filter(function(u){return u.role!=='admin'});
-  list.innerHTML=nonAdmins.map(function(u){
-    var days=u.expiry?daysUntil(u.expiry):null;
-    var expiryClass=!u.expiry?'expiry-unlimited':days<0?'expiry-expired':days<=7?'expiry-warn':'expiry-ok';
-    var expiryText=!u.expiry?'♾️ '+t('unlimited'):days<0?'⛔ '+t('expired'):days<=7?'⚠️ '+days+t('daysLeft'):'✅ '+u.expiry;
-    return '<div class="list-item">'+
-      '<div class="item-row">'+
-        '<div>'+
-          '<div class="item-name">'+u.name+'</div>'+
-          '<div class="item-sub">'+u.code+'</div>'+
-          '<div class="item-expiry '+expiryClass+'">'+expiryText+'</div>'+
-        '</div>'+
-        '<div style="display:flex;gap:4px;align-items:center">'+
-          '<button class="btn-renew" onclick="renewUser(\''+u.code+'\')">+30</button>'+
-          '<button class="btn-remove" onclick="removeUser(\''+u.code+'\')">✕</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
-  }).join('');
-  document.getElementById('statUsers').textContent=nonAdmins.length;
-}
+    try:
+        df = pd.read_csv(log_file)
+        df_symbol = df[df["symbol"] == symbol].tail(10)
 
-function renderAlerts(){
-  var list=document.getElementById('alertsList');
-  if(!list) return;
-  if(alerts.length===0){
-    list.innerHTML='<div style="text-align:center;color:#8b949e;font-size:13px;padding:2rem">'+t('noAlerts')+'</div>';
-    return;
-  }
-  list.innerHTML=alerts.map(function(a,i){
-    var rr=a.target&&a.stop&&a.entry?((a.target-a.entry)/(a.entry-a.stop)).toFixed(1):'N/A';
-    return '<div class="alert-card">'+
-      '<div class="alert-top">'+
-        '<div class="alert-symbol">'+a.symbol+'</div>'+
-        '<div style="display:flex;gap:6px;align-items:center">'+
-          '<div class="alert-type">'+t('active')+'</div>'+
-          '<button class="btn-del-alert" onclick="removeAlert('+i+')">✕</button>'+
-        '</div>'+
-      '</div>'+
-      '<div class="alert-detail">'+t('entry')+': $'+a.entry+' | '+t('target')+': $'+a.target+' | '+t('stop')+': $'+a.stop+'</div>'+
-      '<div class="alert-detail" style="margin-top:4px">R/R: 1:'+rr+'</div>'+
-    '</div>';
-  }).join('');
-}
+        if df_symbol.empty:
+            return None
 
-function renderAll(){
-  renderStockGrid();
-  renderStockList();
-  renderUserList();
-  renderAlerts();
-}
+        # Last 5 decisions
+        last_5 = df_symbol.tail(5)[["date", "close", "rsi", "macd_cross", 
+                                     "critic_verdict", "decision", "confidence",
+                                     "entry", "stop", "target", "rr",
+                                     "actual_result", "score"]].to_dict(orient="records")
 
-function openStock(el){
-  var symbol = typeof el === 'string' ? el : el;
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
-  document.getElementById('pageAnalyze').classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(function(n,i){n.classList.toggle('active',i===1)});
-  document.getElementById('analyzeSymbol').value=symbol;
-}
+        # Calculate stats
+        total = len(df_symbol)
+        scored = df_symbol[df_symbol["score"] != ""].copy()
+        
+        if len(scored) > 0:
+            scored["score_num"] = pd.to_numeric(scored["score"], errors="coerce")
+            avg_score = round(scored["score_num"].mean(), 2)
+            wins = len(scored[scored["score_num"] > 0])
+            win_rate = round(wins / len(scored) * 100, 1)
+        else:
+            avg_score = 0
+            win_rate = 0
 
-function addStock(){
-  var sym=document.getElementById('newStock').value.trim().toUpperCase();
-  if(!sym) return;
-  if(stocks.find(function(s){return s.symbol===sym})){showToast(t('stockExists'));return;}
-  stocks.push({symbol:sym,price:0,change:0,signal:'wait',conf:0,days:0});
-  document.getElementById('newStock').value='';
-  renderAll();
-  showToast(t('stockAdded'));
-}
+        # Execute decisions
+        execute_count = len(df_symbol[df_symbol["decision"] == "Execute"])
+        no_trade_count = len(df_symbol[df_symbol["decision"] == "No Trade"])
 
-function removeStock(i){
-  stocks.splice(i,1);
-  renderAll();
-  showToast(t('removed'));
-}
+        return {
+            "symbol": symbol,
+            "total_sessions": total,
+            "last_5_decisions": last_5,
+            "win_rate": win_rate,
+            "avg_score": avg_score,
+            "execute_count": execute_count,
+            "no_trade_count": no_trade_count,
+            "note": "Memory loaded from shadow_log.csv"
+        }
+    except Exception as e:
+        print(f"Memory load error: {e}")
+        return None
 
-function addUser(){
-  var name=document.getElementById('newUserName').value.trim();
-  var code=document.getElementById('newUserCode').value.trim();
-  var dur=parseInt(document.getElementById('newUserDuration').value);
-  if(!name){showToast(t('generateFirst'));return;}
-  if(!code){showToast(t('generateFirst'));return;}
-  if(users.find(function(u){return u.code===code})){showToast(t('codeExists'));return;}
-  var expiry=dur===0?null:addDays(dur);
-  users.push({name:name,code:code,role:'user',expiry:expiry});
-  document.getElementById('newUserName').value='';
-  document.getElementById('newUserCode').value='';
-  renderAll();
-  showToast(t('userAdded'));
-}
+def format_memory(memory):
+    """Format memory for prompt injection"""
+    if not memory:
+        return "No previous sessions for this asset. This is the first analysis."
 
-function removeUser(code){
-  users=users.filter(function(u){return u.code!==code});
-  renderAll();
-  showToast(t('removed'));
-}
+    lines = [
+        f"INSTITUTIONAL MEMORY — {memory['symbol']}",
+        f"Total sessions: {memory['total_sessions']}",
+        f"Win rate: {memory['win_rate']}%",
+        f"Avg score: {memory['avg_score']}",
+        f"Execute decisions: {memory['execute_count']}",
+        f"No Trade decisions: {memory['no_trade_count']}",
+        "",
+        "Last 5 decisions:"
+    ]
 
-function renewUser(code){
-  var u=users.find(function(u){return u.code===code});
-  if(u) u.expiry=addDays(30);
-  renderAll();
-  showToast('+30 days');
-}
+    for d in memory["last_5_decisions"]:
+        result = d.get("actual_result", "") or "Pending"
+        score = d.get("score", "") or "Pending"
+        lines.append(
+            f"  {d['date']} | Close: {d['close']} | RSI: {d['rsi']} | "
+            f"Decision: {d['decision']} | Confidence: {d['confidence']}% | "
+            f"Result: {result} | Score: {score}"
+        )
 
-function addAlert(){
-  var sym=document.getElementById('alertSymbol').value.trim().toUpperCase();
-  var price=parseFloat(document.getElementById('alertPrice').value);
-  var stop=parseFloat(document.getElementById('alertStop').value);
-  var entry=parseFloat(document.getElementById('alertEntry').value);
-  if(!sym||!price){showToast(t('enterSymbol'));return;}
-  alerts.push({symbol:sym,entry:entry||0,target:price,stop:stop||0});
-  document.getElementById('alertSymbol').value='';
-  document.getElementById('alertPrice').value='';
-  document.getElementById('alertStop').value='';
-  document.getElementById('alertEntry').value='';
-  renderAlerts();
-  showToast(t('alertAdded'));
-}
+    return "\n".join(lines)
 
-function removeAlert(i){
-  alerts.splice(i,1);
-  renderAlerts();
-}
+# ============================================================
+# MAIN COUNCIL FUNCTION
+# ============================================================
+def run_council(symbol):
+    print(f"\n{'='*50}")
+    print(f"ADVISORY COUNCIL — {symbol}")
+    print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"{'='*50}")
 
-var analysisType = 'general';
+    protocol_file = "council_protocol.txt"
+    if os.path.exists(protocol_file):
+        with open(protocol_file, "r", encoding="utf-8") as f:
+            protocol = f.read()
+    else:
+        protocol = "Advisory Council v2.1 — enforce all roles strictly."
 
-function setAnalysisType(type, el) {
-  analysisType = type;
-  var btnG = document.getElementById('btnGeneral');
-  var btnP = document.getElementById('btnPosition');
-  if(type === 'general'){
-    btnG.style.background = '#1f6feb';
-    btnG.style.color = '#fff';
-    btnG.style.border = 'none';
-    btnP.style.background = '#0d1117';
-    btnP.style.color = '#8b949e';
-    btnP.style.border = '1px solid #30363d';
-  } else {
-    btnP.style.background = '#238636';
-    btnP.style.color = '#fff';
-    btnP.style.border = 'none';
-    btnG.style.background = '#0d1117';
-    btnG.style.color = '#8b949e';
-    btnG.style.border = '1px solid #30363d';
-  }
-  document.getElementById('generalOptions').style.display = type === 'general' ? 'block' : 'none';
-  document.getElementById('positionOptions').style.display = type === 'position' ? 'block' : 'none';
-}
+    print(f"📡 Fetching live data for {symbol}...")
+    data = fetch_live_data(symbol)
+    if not data:
+        print(f"❌ Failed to fetch data for {symbol}")
+        return None
 
-function translateTrend(t){
-  var map = {
-    'strong_uptrend': 'صعود قوي',
-    'weak_uptrend': 'صعود ضعيف',
-    'weak_downtrend': 'هبوط ضعيف',
-    'strong_downtrend': 'هبوط قوي',
-    'uptrend': 'صاعد',
-    'downtrend': 'هابط'
-  };
-  return map[t] || t;
-}
+    print(f"✅ Close: ${data['close']} | RSI: {data['rsi']} | MACD: {data['macd_cross']} | Vol: {data['volume_ratio']}x")
 
-function translateMacd(m){
-  return m === 'bullish' ? 'ايجابي' : m === 'bearish' ? 'سلبي' : m;
-}
+    # Load institutional memory
+    memory = load_memory(symbol)
+    memory_text = format_memory(memory)
+    if memory:
+        print(f"📚 Memory: {memory['total_sessions']} sessions | Win rate: {memory['win_rate']}%")
+    else:
+        print(f"📚 No previous memory for {symbol} — first session")
 
-function translateVerdict(v){
-  var map = {
-    'Pass': 'موافقة',
-    'Conditional': 'مشروطة',
-    'Reject': 'رفض',
-    'Unknown': 'غير محدد'
-  };
-  return map[v] || v;
-}
+    stock_news = fetch_stock_news(symbol)
+    macro_news = fetch_macro_news()
 
-function translateDecision(d){
-  var map = {
-    'Execute': 'تنفيذ',
-    'No Trade': 'لا تداول',
-    'Abstain': 'امتناع',
-    'Unknown': 'غير محدد'
-  };
-  return map[d] || d;
-}
+    print("\n[Phase 1] Analyst (Claude)...")
+    analyst_output = run_analyst(symbol, data, protocol, memory_text)
+    print("✅ Analyst done.")
 
-function sendCouncil(){
-  var sym = document.getElementById('analyzeSymbol').value.trim().toUpperCase();
-  if(!sym){ showToast(t('enterSymbol')); return; }
+    print("[Phase 2] Market Intelligence (GPT)...")
+    market_output = run_market_intelligence(symbol, stock_news, macro_news, protocol, memory_text)
+    print("✅ Market Intelligence done.")
 
-  var resultDiv = document.getElementById('analysisResult');
-  var loadingDiv = document.getElementById('resultLoading');
-  var contentDiv = document.getElementById('resultContent');
-  var titleDiv = document.getElementById('resultTitle');
-  var timeDiv = document.getElementById('resultTime');
+    print("[Phase 3] Critic (GPT)...")
+    critic_output = run_critic(symbol, analyst_output, market_output, protocol)
+    print("✅ Critic done.")
 
-  resultDiv.style.display = 'block';
-  loadingDiv.style.display = 'block';
-  contentDiv.textContent = '';
-  titleDiv.textContent = sym + ' - المجلس الاستشاري';
-  timeDiv.textContent = new Date().toLocaleTimeString();
+    print("[Phase 4] Decision Engine (GPT)...")
+    decision_output = run_decision_engine(symbol, analyst_output, market_output, critic_output, protocol)
+    print("✅ Decision Engine done.")
 
-  fetch(API_URL + '/council', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ symbol: sym })
-  })
-  .then(function(res){ return res.json(); })
-  .then(function(data){
-    loadingDiv.style.display = 'none';
-    if(data.status === 'success'){
-      var lines = [];
-      lines.push(data.symbol + ' - ' + new Date().toLocaleDateString());
-      lines.push('-------------------------');
-      lines.push('الاغلاق: $' + data.close);
-      lines.push('مؤشر RSI: ' + data.rsi);
-      lines.push('مؤشر MACD: ' + translateMacd(data.macd));
-      lines.push('الاتجاه: ' + translateTrend(data.weekly_trend));
-      lines.push('جلسات سابقة: ' + data.memory_sessions + ' - نسبة النجاح: ' + data.win_rate + '%');
-      lines.push('-------------------------');
-      lines.push('حكم الناقد: ' + translateVerdict(data.verdict));
-      lines.push('القرار النهائي: ' + translateDecision(data.decision));
-      lines.push('مستوى الثقة: ' + data.confidence + '%');
-      if(data.entry && data.entry !== 'N/A' && data.entry !== 0){
-        lines.push('-------------------------');
-        lines.push('سعر الدخول: $' + data.entry);
-        lines.push('وقف الخسارة: $' + data.stop);
-        lines.push('الهدف: $' + data.target);
-        lines.push('العائد/المخاطرة: ' + data.rr);
-      }
-      contentDiv.textContent = lines.join('\n');
-      showToast(sym + ' - اكتمل تحليل المجلس');
-    } else {
-      contentDiv.textContent = 'خطأ: ' + (data.error || 'حدث خطأ');
+    log = save_shadow_log(symbol, analyst_output, market_output, critic_output, decision_output, data)
+
+    print(f"\n{'='*50}")
+    print(f"COUNCIL DECISION — {symbol}")
+    print(f"{'='*50}")
+    print(f"Close:      ${data['close']}")
+    print(f"RSI:        {data['rsi']}")
+    print(f"MACD:       {data['macd_cross']}")
+    print(f"Weekly:     {data['weekly_trend']}")
+    print(f"Verdict:    {log['critic_verdict']}")
+    print(f"Decision:   {log['decision']}")
+    print(f"Confidence: {log['confidence']}%")
+    print(f"Entry:      {log['entry']}")
+    print(f"Stop:       {log['stop']}")
+    print(f"Target:     {log['target']}")
+    print(f"R/R:        {log['rr']}")
+    print(f"{'='*50}\n")
+
+    return {
+        "symbol": symbol,
+        "data": data,
+        "analyst": analyst_output,
+        "market": market_output,
+        "critic": critic_output,
+        "decision": decision_output,
+        "summary": log
     }
-  })
-  .catch(function(err){
-    loadingDiv.style.display = 'none';
-    contentDiv.textContent = 'خطأ في الاتصال بالسيرفر';
-    console.error(err);
-  });
-}
 
-
-function sendAnalysis(){
-  var sym = document.getElementById('analyzeSymbol').value.trim().toUpperCase();
-  var entryPrice = document.getElementById('entryPrice') ? document.getElementById('entryPrice').value : '';
-
-  if(!sym){ showToast(t('enterSymbol')); return; }
-  if(analysisType === 'position' && !entryPrice){ showToast('أدخل سعر الدخول'); return; }
-
-  var resultDiv = document.getElementById('analysisResult');
-  var loadingDiv = document.getElementById('resultLoading');
-  var contentDiv = document.getElementById('resultContent');
-  var titleDiv = document.getElementById('resultTitle');
-  var timeDiv = document.getElementById('resultTime');
-
-  resultDiv.style.display = 'block';
-  loadingDiv.style.display = 'block';
-  contentDiv.textContent = '';
-  titleDiv.textContent = (analysisType === 'position' ? '💼 ' : '📊 ') + sym;
-  timeDiv.textContent = new Date().toLocaleTimeString();
-
-  fetch(API_URL + '/analyze', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      symbol: sym,
-      analysis_type: analysisType,
-      report_type: reportType,
-      entry_price: entryPrice
-    })
-  })
-  .then(function(res){ return res.json(); })
-  .then(function(data){
-    loadingDiv.style.display = 'none';
-    if(data.status === 'success'){
-      contentDiv.textContent = data.analysis;
-      showToast('✅ ' + sym);
-    } else {
-      contentDiv.textContent = '❌ ' + (data.error || 'Error');
-    }
-  })
-  .catch(function(err){
-    loadingDiv.style.display = 'none';
-    contentDiv.textContent = '❌ Connection error';
-    console.error(err);
-  });
-}
-
-function showToast(msg){
-  var to=document.getElementById('toast');
-  to.textContent=msg;
-  to.style.display='block';
-  setTimeout(function(){to.style.display='none'},2500);
-}
-
-document.getElementById('codeInput').addEventListener('keypress',function(e){
-  if(e.key==='Enter') login();
-});
-
-generateCode();
-var savedCode = localStorage.getItem('stocki_code');
-if(savedCode){
-  document.getElementById('codeInput').value = savedCode;
-  document.getElementById('rememberMe').checked = true;
-}
-window.addEventListener('DOMContentLoaded', function() {
-  applyTranslations();
-  renderAll();
-});
-</script>
-
-<script>
-var deferredPrompt;
-var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-var isAndroid = /android/i.test(navigator.userAgent);
-var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-
-if(!isStandalone) {
-  if(isIOS) {
-    document.getElementById('installBanner').style.display = 'block';
-    document.getElementById('iosInstructions').style.display = 'block';
-  }
-}
-
-window.addEventListener('beforeinstallprompt', function(e) {
-  e.preventDefault();
-  deferredPrompt = e;
-  if(!isStandalone) {
-    document.getElementById('installBanner').style.display = 'block';
-    document.getElementById('androidInstructions').style.display = 'block';
-  }
-});
-
-function installApp() {
-  if(deferredPrompt) {
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then(function(result) {
-      deferredPrompt = null;
-      document.getElementById('installBanner').style.display = 'none';
-    });
-  }
-}
-
-window.addEventListener('appinstalled', function() {
-  document.getElementById('installBanner').style.display = 'none';
-});
-</script>
-</body>
-</html>
+# ============================================================
+# RUN
+# ============================================================
+if __name__ == "__main__":
+    stocks = ["NVDA", "MSFT", "AMZN", "ARM", "PLUG", "QCOM"]
+    for stock in stocks:
+        run_council(stock)
+        print(f"Completed: {stock}")
