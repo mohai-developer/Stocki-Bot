@@ -800,7 +800,7 @@ function sendCouncil(){
   resultDiv.style.display = 'block';
   loadingDiv.style.display = 'block';
   contentDiv.textContent = '';
-  titleDiv.textContent = '🏛️ ' + sym + ' — المجلس الاستشاري';
+  titleDiv.textContent = sym + ' - المجلس الاستشاري';
   timeDiv.textContent = new Date().toLocaleTimeString();
 
   fetch(API_URL + '/council', {
@@ -812,53 +812,38 @@ function sendCouncil(){
   .then(function(data){
     loadingDiv.style.display = 'none';
     if(data.status === 'success'){
-      var text = '';
-      text += '📊 ' + data.symbol + ' — ' + new Date().toLocaleDateString() + '
-';
-      text += '─────────────────────────
-';
-      text += '💰 الإغلاق: $' + data.close + '
-';
-      text += '📈 RSI: ' + data.rsi + '
-';
-      text += '📉 MACD: ' + data.macd + '
-';
-      text += '📅 الاتجاه الأسبوعي: ' + data.weekly_trend + '
-';
-      text += '📚 جلسات سابقة: ' + data.memory_sessions + ' | Win Rate: ' + data.win_rate + '%
-';
-      text += '─────────────────────────
-';
-      text += '⚖️ حكم الناقد: ' + data.verdict + '
-';
-      text += '🎯 القرار النهائي: ' + data.decision + '
-';
-      text += '✅ مستوى الثقة: ' + data.confidence + '%
-';
-      if(data.entry !== 'N/A'){
-        text += '─────────────────────────
-';
-        text += '💰 الدخول: $' + data.entry + '
-';
-        text += '🛑 الوقف: $' + data.stop + '
-';
-        text += '🎯 الهدف: $' + data.target + '
-';
-        text += '📊 R/R: ' + data.rr + '
-';
+      var lines = [];
+      lines.push(data.symbol + ' - ' + new Date().toLocaleDateString());
+      lines.push('-------------------------');
+      lines.push('الاغلاق: $' + data.close);
+      lines.push('RSI: ' + data.rsi);
+      lines.push('MACD: ' + data.macd);
+      lines.push('الاتجاه: ' + data.weekly_trend);
+      lines.push('جلسات سابقة: ' + data.memory_sessions + ' - Win Rate: ' + data.win_rate + '%');
+      lines.push('-------------------------');
+      lines.push('حكم الناقد: ' + data.verdict);
+      lines.push('القرار: ' + data.decision);
+      lines.push('الثقة: ' + data.confidence + '%');
+      if(data.entry && data.entry !== 'N/A'){
+        lines.push('-------------------------');
+        lines.push('الدخول: $' + data.entry);
+        lines.push('الوقف: $' + data.stop);
+        lines.push('الهدف: $' + data.target);
+        lines.push('R/R: ' + data.rr);
       }
-      contentDiv.textContent = text;
-      showToast('✅ ' + sym + ' — المجلس اكتمل');
+      contentDiv.textContent = lines.join('\n');
+      showToast(sym + ' - اكتمل');
     } else {
-      contentDiv.textContent = '❌ ' + (data.error || 'خطأ');
+      contentDiv.textContent = 'خطأ: ' + (data.error || 'حدث خطأ');
     }
   })
   .catch(function(err){
     loadingDiv.style.display = 'none';
-    contentDiv.textContent = '❌ خطأ في الاتصال';
+    contentDiv.textContent = 'خطأ في الاتصال';
     console.error(err);
   });
 }
+
 
 function sendAnalysis(){
   var sym = document.getElementById('analyzeSymbol').value.trim().toUpperCase();
