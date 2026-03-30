@@ -420,19 +420,31 @@ def run_decision(symbol, data, analyst, market_intel, critic):
 
     rr = round((target1 - entry) / (entry - stop), 2) if (entry - stop) > 0 else 0
 
-    return {
-        "Decision": decision,
-        "Confidence": final,
-        "EdgeScore": edge,
-        "FinalScore": final,
-        "Scores": {"Edge": edge, "Technical": tech, "Macro": macro, "Consistency": cons},
-        "Plan": {
+    # لا نعرض الأسعار إلا عند Execute أو Conditional
+    if decision == "No Trade":
+        plan = {
+            "Entry": "N/A",
+            "Stop": "N/A",
+            "Target1": "N/A",
+            "Target2": "N/A",
+            "RiskReward": "N/A"
+        }
+    else:
+        plan = {
             "Entry": entry,
             "Stop": stop,
             "Target1": target1,
             "Target2": target2,
             "RiskReward": f"1:{rr}"
         }
+
+    return {
+        "Decision": decision,
+        "Confidence": final,
+        "EdgeScore": edge,
+        "FinalScore": final,
+        "Scores": {"Edge": edge, "Technical": tech, "Macro": macro, "Consistency": cons},
+        "Plan": plan
     }
 
 # ============================================================
@@ -539,7 +551,8 @@ def run_council(symbol):
         "market_intel": market_intel,
         "critic": critic,
         "decision": decision,
-        "log": log
+        "log": log,
+        "memory": memory
     }
 
 if __name__ == "__main__":
