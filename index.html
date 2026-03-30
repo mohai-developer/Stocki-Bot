@@ -202,9 +202,11 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
   <!-- ANALYZE -->
   <div class="page" id="pageAnalyze">
     <div style="padding:1rem 16px 80px">
+
       <div class="dash-header">
         <div class="dash-title" id="analyzeTitle">Analyze</div>
       </div>
+
       <div class="analyze-card">
         <div style="margin-bottom:12px">
           <label class="mini-label">الرمز</label>
@@ -231,7 +233,9 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
         </div>
 
         <button class="btn-analyze" onclick="sendAnalysis()">تحليل</button>
-      
+        <button class="btn-analyze" onclick="sendCouncil()" style="background:#238636;margin-top:8px">🏛️ تحليل المجلس</button>
+      </div>
+
       <div id="analysisResult" style="display:none;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:1.25rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
           <div style="font-size:14px;font-weight:600;color:#58a6ff" id="resultTitle">تحليل</div>
@@ -246,7 +250,7 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
 
     </div>
   </div>
-</div>
+
 
   <!-- ALERTS -->
   <div class="page" id="pageAlerts">
@@ -781,6 +785,79 @@ function setAnalysisType(type, el) {
   }
   document.getElementById('generalOptions').style.display = type === 'general' ? 'block' : 'none';
   document.getElementById('positionOptions').style.display = type === 'position' ? 'block' : 'none';
+}
+
+function sendCouncil(){
+  var sym = document.getElementById('analyzeSymbol').value.trim().toUpperCase();
+  if(!sym){ showToast(t('enterSymbol')); return; }
+
+  var resultDiv = document.getElementById('analysisResult');
+  var loadingDiv = document.getElementById('resultLoading');
+  var contentDiv = document.getElementById('resultContent');
+  var titleDiv = document.getElementById('resultTitle');
+  var timeDiv = document.getElementById('resultTime');
+
+  resultDiv.style.display = 'block';
+  loadingDiv.style.display = 'block';
+  contentDiv.textContent = '';
+  titleDiv.textContent = '🏛️ ' + sym + ' — المجلس الاستشاري';
+  timeDiv.textContent = new Date().toLocaleTimeString();
+
+  fetch(API_URL + '/council', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol: sym })
+  })
+  .then(function(res){ return res.json(); })
+  .then(function(data){
+    loadingDiv.style.display = 'none';
+    if(data.status === 'success'){
+      var text = '';
+      text += '📊 ' + data.symbol + ' — ' + new Date().toLocaleDateString() + '
+';
+      text += '─────────────────────────
+';
+      text += '💰 الإغلاق: $' + data.close + '
+';
+      text += '📈 RSI: ' + data.rsi + '
+';
+      text += '📉 MACD: ' + data.macd + '
+';
+      text += '📅 الاتجاه الأسبوعي: ' + data.weekly_trend + '
+';
+      text += '📚 جلسات سابقة: ' + data.memory_sessions + ' | Win Rate: ' + data.win_rate + '%
+';
+      text += '─────────────────────────
+';
+      text += '⚖️ حكم الناقد: ' + data.verdict + '
+';
+      text += '🎯 القرار النهائي: ' + data.decision + '
+';
+      text += '✅ مستوى الثقة: ' + data.confidence + '%
+';
+      if(data.entry !== 'N/A'){
+        text += '─────────────────────────
+';
+        text += '💰 الدخول: $' + data.entry + '
+';
+        text += '🛑 الوقف: $' + data.stop + '
+';
+        text += '🎯 الهدف: $' + data.target + '
+';
+        text += '📊 R/R: ' + data.rr + '
+';
+      }
+      contentDiv.textContent = text;
+      showToast('✅ ' + sym + ' — المجلس اكتمل');
+    } else {
+      contentDiv.textContent = '❌ ' + (data.error || 'خطأ');
+    }
+  })
+  .catch(function(err){
+    loadingDiv.style.display = 'none';
+    contentDiv.textContent = '❌ خطأ في الاتصال';
+    console.error(err);
+  });
 }
 
 function sendAnalysis(){
