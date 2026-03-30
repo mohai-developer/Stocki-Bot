@@ -854,12 +854,17 @@ function sendCouncil(){
       lines.push('الاغلاق: $' + data.close);
       lines.push('مؤشر RSI: ' + data.rsi);
       lines.push('مؤشر MACD: ' + translateMacd(data.macd));
-      lines.push('الاتجاه: ' + translateTrend(data.weekly_trend));
+      lines.push('الاتجاه: ' + translateTrend(data.trend || data.weekly_trend));
       lines.push('جلسات سابقة: ' + data.memory_sessions + ' - نسبة النجاح: ' + data.win_rate + '%');
       lines.push('-------------------------');
       lines.push('حكم الناقد: ' + translateVerdict(data.verdict));
       lines.push('القرار النهائي: ' + translateDecision(data.decision));
       lines.push('مستوى الثقة: ' + data.confidence + '%');
+      if(data.edge_score){ lines.push('Edge Score: ' + data.edge_score + '/100'); }
+      if(data.scores){
+        lines.push('── التفاصيل ──');
+        lines.push('فني: ' + (data.scores.Technical||'?') + ' | ماكرو: ' + (data.scores.Macro||'?') + ' | اتساق: ' + (data.scores.Consistency||'?'));
+      }
       if(data.entry && data.entry !== 'N/A' && data.entry !== 0){
         lines.push('-------------------------');
         lines.push('سعر الدخول: $' + data.entry);
