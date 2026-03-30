@@ -339,51 +339,20 @@ def council():
     try:
         body = request.json
         symbol = body.get("symbol", "").upper()
-
         if not symbol:
             return jsonify({"error": "Symbol required"}), 400
 
-        print(f"Council analysis for {symbol}...")
-
-        # Import council functions
         import sys
         sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from council import run_council
 
-        from council import (
-            fetch_live_data, fetch_stock_news, fetch_macro_news,
-            run_analyst, run_market_intelligence, run_critic,
-            run_decision_engine, save_shadow_log, load_memory, format_memory
-        )
+        result = run_council(symbol)
+        if not result:
+            return jsonify({"error": f"Could not analyze {symbol}"}), 500
 
-        # Load protocol
-        protocol_file = "council_protocol.txt"
-        if os.path.exists(protocol_file):
-            with open(protocol_file, "r", encoding="utf-8") as f:
-                protocol = f.read()
-        else:
-            protocol = "Advisory Council v2.1 — enforce all roles strictly."
-
-        # Fetch data
-        data = fetch_live_data(symbol)
-        if not data:
-            return jsonify({"error": f"Could not fetch data for {symbol}"}), 500
-
-        # Load memory
-        memory = load_memory(symbol)
-        memory_text = format_memory(memory)
-
-        # Fetch news
-        stock_news = fetch_stock_news(symbol)
-        macro_news = fetch_macro_news()
-
-        # Run council
-        analyst_output = run_analyst(symbol, data, protocol, memory_text)
-        market_output = run_market_intelligence(symbol, stock_news, macro_news, protocol, memory_text)
-        critic_output = run_critic(symbol, analyst_output, market_output, protocol)
-        decision_output = run_decision_engine(symbol, analyst_output, market_output, critic_output, protocol)
-
-        # Save log
-        log = save_shadow_log(symbol, analyst_output, market_output, critic_output, decision_output, data)
+        data = result["data"]
+        decision = result["decision"]
+        memory = result.get("log", {})
 
         return jsonify({
             "status": "success",
@@ -391,25 +360,25 @@ def council():
             "close": float(data["close"]),
             "rsi": float(data["rsi"]),
             "macd": data["macd_cross"],
-            "weekly_trend": data["weekly_trend"],
-            "verdict": log["critic_verdict"],
-            "decision": log["decision"],
-            "confidence": log["confidence"],
-            "entry": log["entry"],
-            "stop": log["stop"],
-            "target": log["target"],
-            "rr": log["rr"],
-            "analyst": analyst_output,
-            "market": market_output,
-            "critic": critic_output,
-            "decision_full": decision_output,
-            "memory_sessions": memory["total_sessions"] if memory else 0,
-            "win_rate": memory["win_rate"] if memory else 0
+            "trend": data["trend"],
+            "edge_score": data["edge_score"],
+            "verdict": f"{decision['Confidence']}%",
+            "decision": decision["Decision"],
+            "confidence": decision["Confidence"],
+            "entry": decision["Plan"]["Entry"],
+            "stop": decision["Plan"]["Stop"],
+            "target": decision["Plan"]["Target1"],
+            "target2": decision["Plan"]["Target2"],
+            "rr": decision["Plan"]["RiskReward"],
+            "scores": decision.get("Scores", {}),
+            "memory_sessions": result.get("log", {}).get("confidence", 0),
+            "win_rate": 0
         })
 
     except Exception as e:
         print(f"Council error: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
