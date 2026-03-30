@@ -371,8 +371,8 @@ def council():
             "target2": decision["Plan"]["Target2"],
             "rr": decision["Plan"]["RiskReward"],
             "scores": decision.get("Scores", {}),
-            "memory_sessions": result.get("log", {}).get("confidence", 0),
-            "win_rate": 0
+            "memory_sessions": result.get("memory", {}).get("total_sessions", 0) if result.get("memory") else 0,
+            "win_rate": result.get("memory", {}).get("win_rate", 0) if result.get("memory") else 0
         })
 
     except Exception as e:
