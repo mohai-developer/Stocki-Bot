@@ -178,18 +178,27 @@ def analyze_general(symbol, report_type, data, stock_news, market_news, geo_news
         if report_type == "full":
             options_rec = get_options_recommendation(symbol, data.get("close", 0) if data else 0)
         
-        options_text = ""
         if options_rec:
             options_text = f"""
 
-أضف في نهاية تقريرك قسم "توصية الخيارات":
-📊 نوع الخيار: {options_rec['type']}
-📅 تاريخ الانتهاء المقترح: {options_rec['expiry']}
-💰 Strike المقترح: ${options_rec['suggested_strike']}
-📈 IV الحالي: {options_rec['iv_current']}% — {options_rec['iv_signal']}
-{options_rec['iv_rating']}
-تقلب ضمني منخفض = خيارات رخيصة = وقت الشراء
-تقلب ضمني مرتفع = خيارات غالية = تجنب الشراء
+أضف في نهاية تقريرك هذا القسم كما هو:
+
+───────────────────────────
+📊 توصية الخيارات:
+النوع: {options_rec['type']}
+تاريخ الانتهاء: {options_rec['expiry']}
+Strike المقترح: ${options_rec['suggested_strike']}
+IV الحالي: {options_rec['iv_current']}% — {options_rec['iv_signal']} {options_rec['iv_rating']}
+───────────────────────────
+"""
+        else:
+            options_text = """
+
+أضف في نهاية تقريرك هذا السطر كما هو:
+
+───────────────────────────
+📊 توصية الخيارات: لا توصية حالياً
+───────────────────────────
 """
 
         prompt = f"""
