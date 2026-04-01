@@ -173,6 +173,25 @@ def analyze_general(symbol, report_type, data, stock_news, market_news, geo_news
 6. مستوى الثقة: X% مع 3 أسباب و3 مخاطر
 """
 
+        # جلب توصية الخيارات
+        options_rec = None
+        if report_type == "full":
+            options_rec = get_options_recommendation(symbol, data.get("close", 0) if data else 0)
+        
+        options_text = ""
+        if options_rec:
+            options_text = f"""
+
+أضف في نهاية تقريرك قسم "توصية الخيارات":
+📊 نوع الخيار: {options_rec['type']}
+📅 تاريخ الانتهاء المقترح: {options_rec['expiry']}
+💰 Strike المقترح: ${options_rec['suggested_strike']}
+📈 IV الحالي: {options_rec['iv_current']}% — {options_rec['iv_signal']}
+{options_rec['iv_rating']}
+تقلب ضمني منخفض = خيارات رخيصة = وقت الشراء
+تقلب ضمني مرتفع = خيارات غالية = تجنب الشراء
+"""
+
         prompt = f"""
 أنت محلل مالي محترف متخصص في الأسهم الأمريكية وخبير في Swing Trading.
 
@@ -183,7 +202,7 @@ def analyze_general(symbol, report_type, data, stock_news, market_news, geo_news
 الأحداث الجيوسياسية: {geo_news}
 
 {format_instruction}
-
+{options_text}
 كن دقيقاً بالأرقام ولا تعطِ إجابات مبهمة.
 """
         message = client.messages.create(
@@ -379,6 +398,73 @@ def council():
         print(f"Council error: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+
+def get_options_recommendation(symbol, current_price):
+    """جلب بيانات الخيارات وحساب IV Rank تقريبياً"""
+    try:
+        ticker = yf.Ticker(symbol)
+        options_dates = ticker.options
+        
+        if not options_dates or len(options_dates) < 2:
+            return None
+        
+        # نختار أقرب انتهاء بعد 30 يوم
+        from datetime import datetime, timedelta
+        target_date = datetime.now() + timedelta(days=30)
+        
+        best_date = None
+        for d in options_dates:
+            exp = datetime.strptime(d, "%Y-%m-%d")
+            if exp > target_date:
+                best_date = d
+                break
+        
+        if not best_date:
+            best_date = options_dates[-1]
+        
+        chain = ticker.option_chain(best_date)
+        calls = chain.calls
+        puts = chain.puts
+        
+        # IV الحالي (median للخيارات قرب السعر الحالي)
+        atm_calls = calls[abs(calls['strike'] - current_price) < current_price * 0.05]
+        atm_puts = puts[abs(puts['strike'] - current_price) < current_price * 0.05]
+        
+        if atm_calls.empty or atm_puts.empty:
+            atm_calls = calls
+            atm_puts = puts
+        
+        iv_calls = round(atm_calls['impliedVolatility'].median() * 100, 1)
+        iv_puts = round(atm_puts['impliedVolatility'].median() * 100, 1)
+        iv_current = round((iv_calls + iv_puts) / 2, 1)
+        
+        # Strike المقترح (أقرب strike فوق السعر للـ Call)
+        otm_calls = calls[calls['strike'] > current_price].head(3)
+        suggested_strike = round(otm_calls['strike'].iloc[0], 2) if not otm_calls.empty else round(current_price * 1.05, 2)
+        
+        # تقييم IV
+        if iv_current < 30:
+            iv_signal = "منخفض — مناسب لشراء الخيارات"
+            iv_rating = "✅ جيد"
+        elif iv_current < 50:
+            iv_signal = "متوسط — مقبول بحذر"
+            iv_rating = "⚠️ متوسط"
+        else:
+            iv_signal = "مرتفع — الخيارات غالية"
+            iv_rating = "❌ مرتفع"
+        
+        return {
+            "expiry": best_date,
+            "iv_current": iv_current,
+            "iv_signal": iv_signal,
+            "iv_rating": iv_rating,
+            "suggested_strike": suggested_strike,
+            "type": "Call Option"
+        }
+    except Exception as e:
+        print(f"Options error for {symbol}: {e}")
+        return None
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
