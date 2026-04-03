@@ -61,64 +61,45 @@ WATCHLIST_FLAT = [s for group in WATCHLIST_FULL.values() for s in group]
 # ══════════════════════════════════════════════════════════════
 # حساب CES بسيط (بدون Options — للسرعة)
 # ══════════════════════════════════════════════════════════════
+"""
+هذا التعديل فقط — استبدل دالة quick_ces في ces_scanner.py بهذه النسخة
+"""
+
 def quick_ces(symbol: str, profile: dict) -> dict:
-    """حساب CES سريع من بيانات السهم فقط"""
+    """حساب CES كامل مع بيانات الأوبشن الحقيقية"""
     try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period="1y", interval="1d", auto_adjust=True)
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        df = df[["Open","High","Low","Close","Volume"]].copy()
-
-        if len(df) < 60:
-            return {"error": "بيانات غير كافية"}
-
-        price = float(df["Close"].iloc[-1])
-
-        # Kernel
-        kernel = gaussian_kernel_regression(df["Close"], bandwidth=20)
-
-        # Stochastic RSI
-        k_line, d_line = stochastic_rsi(df["Close"])
-
-        # IV Rank
-        iv_arr = yang_zhang_iv_rank(df)
-        iv_val = float(iv_arr[-1]) if len(iv_arr) > 0 else 50.0
-
-        # الدرجات الفنية
-        sc_kernel = score_kernel_trend(df["Close"], kernel)
-        sc_srsi   = score_stoch_rsi(k_line, d_line)
-        sc_iv     = score_iv_rank(iv_val)
-
-        # أوزان سريعة بدون Options (نعيد توزيع الأوزان)
-        w_k  = WEIGHTS["kernel"]  + WEIGHTS["oi_mom"] // 2
-        w_sr = WEIGHTS["stoch_rsi"] + WEIGHTS["pcr"] // 2
-        w_iv = WEIGHTS["iv_rank"] + WEIGHTS["iv_skew"] // 2
-        tw   = w_k + w_sr + w_iv + WEIGHTS["oi_mom"] // 2 + WEIGHTS["pcr"] // 2 + WEIGHTS["iv_skew"] // 2
-
-        ces_raw = (sc_kernel * w_k + sc_srsi * w_sr + sc_iv * w_iv) / (w_k + w_sr + w_iv)
-        ces_raw = float(pd.Series([ces_raw]).ewm(span=3, adjust=False).mean().iloc[-1])
-
+        # استخدام CES v5 الكامل بدل الحساب السريع
+        from ces_v5 import compute_ces_v5
+        
+        result = compute_ces_v5(symbol)
+        
+        if not result:
+            return {"symbol": symbol, "error": "فشل الحساب"}
+        
+        ces_score = result.get("ces_score", 0)
         thr = profile["threshold"]
-
-        # مسافة من العتبة
-        dist = ces_raw - thr
-
-        # حالة الـ CES قبل يومين للكشف عن الاتجاه
+        dist = ces_score - thr
+        
+        # IV Rank الحقيقي
+        iv_val = result.get("raw_data", {}).get("iv_rank_pct", 50.0)
+        
         return {
             "symbol":    symbol,
-            "price":     round(price, 2),
-            "ces":       round(ces_raw, 1),
+            "price":     result.get("price", 0),
+            "ces":       round(ces_score, 1),
             "threshold": thr,
             "distance":  round(dist, 1),
             "iv_rank":   round(iv_val, 1),
             "style":     profile["style"],
-            "signal":    "ادخل" if ces_raw >= thr else ("قريب" if dist >= -8 else "انتظر"),
+            "signal":    "ادخل" if ces_score >= thr else ("قريب" if dist >= -8 else "انتظر"),
+            # بيانات إضافية للتقرير
+            "pcr":       result.get("raw_data", {}).get("pcr", None),
+            "iv_skew":   result.get("raw_data", {}).get("iv_skew_pts", None),
+            "stoch_k":   result.get("raw_data", {}).get("stoch_k", None),
         }
-
+        
     except Exception as e:
         return {"symbol": symbol, "error": str(e)}
-
 
 # ══════════════════════════════════════════════════════════════
 # المسح الكامل
