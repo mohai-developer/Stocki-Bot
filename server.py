@@ -475,6 +475,51 @@ def get_options_recommendation(symbol, current_price):
         print(f"Options error for {symbol}: {e}")
         return None
 
+
+@app.route("/scanner", methods=["GET"])
+def scanner():
+    try:
+        import sys
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from ces_scanner import run_scanner, WATCHLIST_FLAT
+        from ces_v5 import get_profile
+
+        results = run_scanner(WATCHLIST_FLAT)
+
+        clean = []
+        for r in results:
+            if "error" in r:
+                continue
+            clean.append({
+                "symbol":    r.get("symbol", ""),
+                "price":     r.get("price", 0),
+                "ces":       r.get("ces", 0),
+                "threshold": r.get("threshold", 72),
+                "distance":  r.get("distance", 0),
+                "iv_rank":   r.get("iv_rank", 0),
+                "style":     r.get("style", ""),
+                "signal":    r.get("signal", "انتظر"),
+            })
+
+        enter = [r for r in clean if r["signal"] == "ادخل"]
+        near  = [r for r in clean if r["signal"] == "قريب"]
+        wait  = [r for r in clean if r["signal"] == "انتظر"]
+
+        return jsonify({
+            "status":   "success",
+            "date":     datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "total":    len(clean),
+            "signals":  len(enter),
+            "results":  clean,
+            "enter":    enter,
+            "near":     near,
+            "wait":     wait
+        })
+
+    except Exception as e:
+        print(f"Scanner error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"Server running on port {port}")
