@@ -252,6 +252,49 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
   </div>
 
 
+  <!-- OPTIONS SCANNER -->
+  <div class="page" id="pageOptions">
+    <div style="padding:1rem 16px 80px">
+      <div class="dash-header">
+        <div class="dash-title">الخيارات — CES Scanner</div>
+        <button onclick="loadScanner()" style="background:#238636;border:none;color:#fff;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px">تحديث</button>
+      </div>
+
+      <div id="scannerLoading" style="text-align:center;padding:3rem;color:#8b949e;display:none">
+        <div style="font-size:24px;margin-bottom:8px">⏳</div>
+        <div style="font-size:13px">جاري المسح... قد يستغرق دقيقة</div>
+      </div>
+
+      <div id="scannerEmpty" style="text-align:center;padding:3rem;color:#8b949e">
+        <div style="font-size:32px;margin-bottom:8px">📊</div>
+        <div style="font-size:13px">اضغط تحديث لبدء المسح</div>
+      </div>
+
+      <div id="scannerResults" style="display:none">
+        <div id="scannerSummary" style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:12px;margin-bottom:16px;display:flex;justify-content:space-around;text-align:center">
+          <div>
+            <div style="font-size:20px;font-weight:700;color:#3fb950" id="scanEnterCount">0</div>
+            <div style="font-size:11px;color:#8b949e">إشارة دخول</div>
+          </div>
+          <div>
+            <div style="font-size:20px;font-weight:700;color:#d29922" id="scanNearCount">0</div>
+            <div style="font-size:11px;color:#8b949e">قريب</div>
+          </div>
+          <div>
+            <div style="font-size:20px;font-weight:700;color:#8b949e" id="scanWaitCount">0</div>
+            <div style="font-size:11px;color:#8b949e">انتظر</div>
+          </div>
+          <div>
+            <div style="font-size:12px;color:#8b949e" id="scanDate"></div>
+            <div style="font-size:11px;color:#8b949e">آخر تحديث</div>
+          </div>
+        </div>
+
+        <div id="scannerList"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ALERTS -->
   <div class="page" id="pageAlerts">
     <div style="padding:1rem 16px 80px">
@@ -356,6 +399,10 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
     <div class="nav-item" onclick="showPage('Analyze',this)">
       <div class="nav-icon">🔍</div>
       <div class="nav-label" id="navAnalyze">Analyze</div>
+    </div>
+    <div class="nav-item" onclick="showPage('Options',this)">
+      <div class="nav-icon">📈</div>
+      <div class="nav-label" id="navOptions">الخيارات</div>
     </div>
     <div class="nav-item" onclick="showPage('Alerts',this)">
       <div class="nav-icon">🔔</div>
@@ -562,6 +609,7 @@ function showPage(name,el){
   document.getElementById('page'+name).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active')});
   if(el) el.classList.add('active');
+  if(name === 'Options') loadScanner();
 }
 
 function setReport(type,el){
@@ -821,6 +869,87 @@ function translateDecision(d){
     'Unknown': 'غير محدد'
   };
   return map[d] || d;
+}
+
+function loadScanner(){
+  var loading = document.getElementById('scannerLoading');
+  var empty = document.getElementById('scannerEmpty');
+  var results = document.getElementById('scannerResults');
+  var list = document.getElementById('scannerList');
+
+  loading.style.display = 'block';
+  empty.style.display = 'none';
+  results.style.display = 'none';
+
+  fetch(API_URL + '/scanner')
+  .then(function(res){ return res.json(); })
+  .then(function(data){
+    loading.style.display = 'none';
+    if(data.status === 'success'){
+      results.style.display = 'block';
+      document.getElementById('scanEnterCount').textContent = data.enter.length;
+      document.getElementById('scanNearCount').textContent = data.near.length;
+      document.getElementById('scanWaitCount').textContent = data.wait.length;
+      document.getElementById('scanDate').textContent = data.date;
+
+      var html = '';
+
+      if(data.enter.length > 0){
+        html += '<div style="font-size:12px;font-weight:600;color:#3fb950;margin-bottom:8px">🟢 إشارات دخول نشطة</div>';
+        data.enter.forEach(function(r){
+          html += buildScanCard(r, '#3fb950', '#0d2818');
+        });
+      }
+
+      if(data.near.length > 0){
+        html += '<div style="font-size:12px;font-weight:600;color:#d29922;margin:12px 0 8px">🟡 قريب من الإشارة</div>';
+        data.near.forEach(function(r){
+          html += buildScanCard(r, '#d29922', '#1c1810');
+        });
+      }
+
+      if(data.wait.length > 0){
+        html += '<div style="font-size:12px;font-weight:600;color:#8b949e;margin:12px 0 8px">⚪ انتظر</div>';
+        data.wait.forEach(function(r){
+          html += buildScanCard(r, '#8b949e', '#161b22');
+        });
+      }
+
+      list.innerHTML = html;
+    } else {
+      empty.style.display = 'block';
+      empty.innerHTML = '<div style="font-size:24px">❌</div><div style="font-size:13px;margin-top:8px">خطأ: ' + (data.error || 'حدث خطأ') + '</div>';
+    }
+  })
+  .catch(function(err){
+    loading.style.display = 'none';
+    empty.style.display = 'block';
+    empty.innerHTML = '<div style="font-size:24px">❌</div><div style="font-size:13px;margin-top:8px">خطأ في الاتصال</div>';
+    console.error(err);
+  });
+}
+
+function buildScanCard(r, color, bg){
+  var dist = r.distance > 0 ? '+' + r.distance : r.distance;
+  var cesBar = Math.min(100, Math.max(0, r.ces));
+  return '<div style="background:' + bg + ';border:1px solid ' + color + '33;border-radius:10px;padding:12px;margin-bottom:8px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+      '<div style="font-weight:700;font-size:15px;color:#e6edf3">' + r.symbol + '</div>' +
+      '<div style="font-size:12px;color:' + color + ';font-weight:600">CES: ' + r.ces + '</div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;font-size:11px;color:#8b949e;margin-bottom:8px">' +
+      '<div>السعر: <span style="color:#e6edf3">$' + r.price + '</span></div>' +
+      '<div>العتبة: <span style="color:#e6edf3">' + r.threshold + '</span></div>' +
+      '<div>المسافة: <span style="color:' + color + '">' + dist + '</span></div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:11px;color:#8b949e">' +
+      '<div>IV Rank: <span style="color:#e6edf3">' + r.iv_rank + '%</span></div>' +
+      '<div>النمط: <span style="color:#e6edf3">' + r.style + '</span></div>' +
+    '</div>' +
+    '<div style="margin-top:8px;background:#0d1117;border-radius:4px;height:4px">' +
+      '<div style="background:' + color + ';height:4px;border-radius:4px;width:' + cesBar + '%"></div>' +
+    '</div>' +
+  '</div>';
 }
 
 function sendCouncil(){
