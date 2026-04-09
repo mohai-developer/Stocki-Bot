@@ -220,6 +220,23 @@ def fetch_live_data(symbol):
 # ============================================================
 def fetch_stock_news(symbol):
     try:
+        import xml.etree.ElementTree as ET
+        rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+        resp = requests.get(rss_url, timeout=10)
+        root = ET.fromstring(resp.content)
+        
+        items = []
+        for item in root.findall(".//item")[:8]:
+            title = item.findtext("title", "")
+            source = item.findtext("source", "Yahoo Finance")
+            pub_date = item.findtext("pubDate", "")[:16] if item.findtext("pubDate") else ""
+            if title:
+                items.append(f"- {title} ({source}) {pub_date}")
+        
+        if items:
+            return "\n".join(items)
+        
+        # fallback
         news = yf.Ticker(symbol).news
         if not news:
             return "No recent news"
