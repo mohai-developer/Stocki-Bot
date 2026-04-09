@@ -22,16 +22,34 @@ DATA_FILE = "market_data.csv"
 
 def get_stock_news(symbol):
     try:
+        # Yahoo Finance RSS — أشمل وأحدث من yfinance.news
+        import xml.etree.ElementTree as ET
+        rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
+        resp = requests.get(rss_url, timeout=10)
+        root = ET.fromstring(resp.content)
+        
+        news_text = []
+        for item in root.findall(".//item")[:8]:
+            title = item.findtext("title", "")
+            source = item.findtext("source", "Yahoo Finance")
+            pub_date = item.findtext("pubDate", "")[:16] if item.findtext("pubDate") else ""
+            if title:
+                news_text.append(f"- {title} ({source}) {pub_date}")
+        
+        if news_text:
+            return "\n".join(news_text)
+        
+        # fallback لـ yfinance.news
         ticker = yf.Ticker(symbol)
         news = ticker.news
         if not news:
             return "No news available"
-        news_text = []
+        items = []
         for item in news[:5]:
             title = item.get("title", "")
             publisher = item.get("publisher", "")
-            news_text.append(f"- {title} ({publisher})")
-        return "\n".join(news_text)
+            items.append(f"- {title} ({publisher})")
+        return "\n".join(items)
     except:
         return "Could not fetch news"
 
@@ -151,26 +169,56 @@ def analyze_general(symbol, report_type, data, stock_news, market_news, geo_news
 """
         else:
             format_instruction = """
-قدم تقريراً مفصلاً:
+أنت محلل Smart Money محترف. حلل السهم بهذا الإطار:
 
-1. الوضع الفني: RSI، MACD، Bollinger، الترند، حجم التداول
-2. الوضع الأساسي: القطاع، P/E، الأرباح القادمة
-3. تأثير الأخبار والأحداث الجيوسياسية
-4. إشارات Pre-Market و After-Hours
+1. MARKET STATE (حالة السوق)
+هل السوق نشط أم ميت؟ (الفوليوم + نطاق الشموع)
+إذا كان ميتاً → القرار: NO TRADE فوراً
 
-5. التوصية النهائية:
-   - الوضع: إيجابي أم سلبي
-   - القرار: ادخل / انتظر / تجنب
+2. LOCATION (الموقع)
+أين السعر الآن؟
+- عند دعم/مقاومة سابقة واضحة؟
+- عند منطقة فوليوم مرتفع سابقة؟
+- في الفراغ؟ (= ضوضاء، يمنع الدخول)
 
-   إذا كانت التوصية الدخول:
-   💰 سعر الدخول المقترح: $X (مع السبب الفني)
-   🎯 الهدف الأول: $X
-   🎯 الهدف الثاني: $X
-   🛑 وقف الخسارة: $X (مع السبب)
-   📊 نسبة R/R: 1:X
-   ⏰ توقيت الدخول: [الشرط الفني المطلوب]
+3. VOLUME LAW (الجهد والنتيجة)
+- فوليوم عالي + شمعة قوية = زخم حقيقي
+- فوليوم عالي + شمعة صغيرة = امتصاص (انتظر تأكيد)
+- فوليوم ضعيف + حركة قوية = حركة وهمية (يمنع)
+- فوليوم منخفض + هبوط نحو دعم = Supply Dry-up (تحضير)
 
-6. مستوى الثقة: X% مع 3 أسباب و3 مخاطر
+4. PATTERN (النمط الحالي)
+- Compression: تضيق الشموع + انخفاض الفوليوم = طاقة مخزنة
+- Spring: كسر دعم + عودة سريعة = تجميع سيولة
+- Upthrust: كسر مقاومة + رفض = تصريف
+- Absorption: فوليوم عالي بدون حركة = انتظر
+
+5. STRUCTURE — MSB (كسر الهيكل)
+هل حدث كسر هيكل؟
+- صعود: كسر آخر Lower High
+- هبوط: كسر آخر Higher Low
+بدون MSB = لا دخول حتى لو النمط جميل
+
+6. القرار النهائي
+يجب توفر الثلاثة:
+✓ Location واضح
+✓ Pattern محدد
+✓ MSB حدث
+
+إذا الثلاثة متوفرة:
+💰 سعر الدخول: $X (محافظ: انتظار إعادة اختبار / هجومي: مباشر بعد MSB)
+🎯 الهدف الأول: $X
+🎯 الهدف الثاني: $X
+🛑 وقف الخسارة: $X (تحت/فوق منطقة السيولة)
+📊 R/R: 1:X
+⏰ شرط الدخول: [المحافظ أم الهجومي مع السبب]
+
+إذا ناقص عنصر واحد:
+→ NO TRADE مع ذكر السبب الدقيق
+
+الوضع الأساسي: P/E، الأرباح القادمة، القطاع
+تأثير الأخبار والماكرو
+مستوى الثقة: X% مع 3 أسباب و3 مخاطر
 """
 
         # جلب توصية الخيارات
