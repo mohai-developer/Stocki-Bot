@@ -26,14 +26,22 @@ def get_stock_news(symbol):
         
         # المصدر الأول: NewsAPI بحث مخصص للسهم
         if NEWS_API_KEY:
+            # جلب اسم الشركة الكامل للبحث الأدق
+            try:
+                company_name = yf.Ticker(symbol).info.get("longName", symbol)
+                short_name = yf.Ticker(symbol).info.get("shortName", symbol)
+                query = f"{symbol} OR {short_name}"
+            except:
+                query = f"{symbol} stock"
+            
             url = "https://newsapi.org/v2/everything"
             params = {
                 "apiKey": NEWS_API_KEY,
-                "q": f"{symbol} stock",
+                "q": query,
                 "language": "en",
                 "sortBy": "publishedAt",
                 "pageSize": 8,
-                "from": (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
+                "from": (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
             }
             resp = requests.get(url, params=params, timeout=10)
             data = resp.json()
@@ -204,7 +212,7 @@ def analyze_general(symbol, report_type, data, stock_news, market_news, geo_news
 هل حدث كسر هيكل؟
 - صعود: كسر آخر Lower High
 - هبوط: كسر آخر Higher Low
-بدون MSB = لا دخول حتى لو النمط جميل
+⚠️ مهم: إذا لم تستطع تحديد الهيكل من البيانات المتاحة، اذكر ذلك كملاحظة فقط ولا تعطّل القرار. استمر في التحليل بناءً على باقي العناصر المتوفرة.
 
 6. القرار النهائي
 يجب توفر الثلاثة:
