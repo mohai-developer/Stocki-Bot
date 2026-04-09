@@ -22,36 +22,43 @@ DATA_FILE = "market_data.csv"
 
 def get_stock_news(symbol):
     try:
-        # Yahoo Finance RSS — أشمل وأحدث من yfinance.news
-        import xml.etree.ElementTree as ET
-        rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
-        resp = requests.get(rss_url, timeout=10)
-        root = ET.fromstring(resp.content)
+        news_items = []
         
-        news_text = []
-        for item in root.findall(".//item")[:8]:
-            title = item.findtext("title", "")
-            source = item.findtext("source", "Yahoo Finance")
-            pub_date = item.findtext("pubDate", "")[:16] if item.findtext("pubDate") else ""
-            if title:
-                news_text.append(f"- {title} ({source}) {pub_date}")
+        # المصدر الأول: NewsAPI بحث مخصص للسهم
+        if NEWS_API_KEY:
+            url = "https://newsapi.org/v2/everything"
+            params = {
+                "apiKey": NEWS_API_KEY,
+                "q": f"{symbol} stock",
+                "language": "en",
+                "sortBy": "publishedAt",
+                "pageSize": 8,
+                "from": (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
+            }
+            resp = requests.get(url, params=params, timeout=10)
+            data = resp.json()
+            if data.get("status") == "ok":
+                for a in data.get("articles", [])[:8]:
+                    title = a.get("title", "")
+                    source = a.get("source", {}).get("name", "")
+                    published = a.get("publishedAt", "")[:10]
+                    if title and "[Removed]" not in title:
+                        news_items.append(f"- {title} ({source}) {published}")
         
-        if news_text:
-            return "\n".join(news_text)
+        # المصدر الثاني: yfinance كاحتياط
+        if not news_items:
+            ticker = yf.Ticker(symbol)
+            news = ticker.news
+            if news:
+                for item in news[:5]:
+                    title = item.get("title", "")
+                    publisher = item.get("publisher", "")
+                    if title:
+                        news_items.append(f"- {title} ({publisher})")
         
-        # fallback لـ yfinance.news
-        ticker = yf.Ticker(symbol)
-        news = ticker.news
-        if not news:
-            return "No news available"
-        items = []
-        for item in news[:5]:
-            title = item.get("title", "")
-            publisher = item.get("publisher", "")
-            items.append(f"- {title} ({publisher})")
-        return "\n".join(items)
-    except:
-        return "Could not fetch news"
+        return "\n".join(news_items) if news_items else "No recent news found"
+    except Exception as e:
+        return f"Could not fetch news: {e}"
 
 def get_market_news():
     try:
