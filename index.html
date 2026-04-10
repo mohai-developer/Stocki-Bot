@@ -232,8 +232,7 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
           <input class="mini-input" id="entryPrice" placeholder="0.00" type="number" />
         </div>
 
-        <button class="btn-analyze" onclick="sendAnalysis()">تحليل</button>
-        <button class="btn-analyze" onclick="sendCouncil()" style="background:#238636;margin-top:8px">🏛️ تحليل المجلس</button>
+        <button class="btn-analyze" onclick="sendDual()" style="background:#238636">تحليل</button>
       </div>
 
       <div id="analysisResult" style="display:none;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:1.25rem">
@@ -950,6 +949,100 @@ function buildScanCard(r, color, bg){
       '<div style="background:' + color + ';height:4px;border-radius:4px;width:' + cesBar + '%"></div>' +
     '</div>' +
   '</div>';
+}
+
+function sendDual(){
+  var sym = document.getElementById('analyzeSymbol').value.trim().toUpperCase();
+  if(!sym){ showToast(t('enterSymbol')); return; }
+
+  var resultDiv = document.getElementById('analysisResult');
+  var loadingDiv = document.getElementById('resultLoading');
+  var contentDiv = document.getElementById('resultContent');
+  var titleDiv   = document.getElementById('resultTitle');
+  var timeDiv    = document.getElementById('resultTime');
+
+  resultDiv.style.display = 'block';
+  loadingDiv.style.display = 'block';
+  contentDiv.textContent = '';
+  titleDiv.textContent = sym + ' — تحليل';
+  timeDiv.textContent = new Date().toLocaleTimeString();
+
+  fetch(API_URL + '/dual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol: sym })
+  })
+  .then(function(res){ return res.json(); })
+  .then(function(data){
+    loadingDiv.style.display = 'none';
+    if(data.status === 'success'){
+      var lines = [];
+
+      // نموذج C
+      lines.push('نموذج C:');
+      lines.push(data.claude.analysis);
+      if(data.claude.reasons && data.claude.reasons.length){
+        lines.push('الأسباب:');
+        data.claude.reasons.forEach(function(r){ lines.push('  • ' + r); });
+      }
+      if(data.claude.risks && data.claude.risks.length){
+        lines.push('المخاطر:');
+        data.claude.risks.forEach(function(r){ lines.push('  ⚠ ' + r); });
+      }
+      lines.push('القرار: ' + data.claude.decision + ' | الثقة: ' + data.claude.confidence + '%');
+      if(data.claude.decision === 'ادخل' && data.claude.entry > 0){
+        lines.push('الدخول: $' + data.claude.entry + ' | الوقف: $' + data.claude.stop);
+        lines.push('الهدف 1: $' + data.claude.target1 + ' | الهدف 2: $' + data.claude.target2);
+        lines.push('R/R: ' + data.claude.rr);
+      }
+
+      // فاصل
+      lines.push('- - - - - - - - - - - - - - - - - - - -');
+
+      // نموذج G
+      lines.push('نموذج G:');
+      lines.push(data.gpt.analysis);
+      if(data.gpt.reasons && data.gpt.reasons.length){
+        lines.push('الأسباب:');
+        data.gpt.reasons.forEach(function(r){ lines.push('  • ' + r); });
+      }
+      if(data.gpt.risks && data.gpt.risks.length){
+        lines.push('المخاطر:');
+        data.gpt.risks.forEach(function(r){ lines.push('  ⚠ ' + r); });
+      }
+      lines.push('القرار: ' + data.gpt.decision + ' | الثقة: ' + data.gpt.confidence + '%');
+      if(data.gpt.decision === 'ادخل' && data.gpt.entry > 0){
+        lines.push('الدخول: $' + data.gpt.entry + ' | الوقف: $' + data.gpt.stop);
+        lines.push('الهدف 1: $' + data.gpt.target1 + ' | الهدف 2: $' + data.gpt.target2);
+        lines.push('R/R: ' + data.gpt.rr);
+      }
+
+      // فاصل
+      lines.push('- - - - - - - - - - - - - - - - - - - -');
+
+      // الخلاصة
+      lines.push('الخلاصة:');
+      lines.push('C: ' + data.combined.claude_conf + '% | G: ' + data.combined.gpt_conf + '%');
+      lines.push('متوسط الثقة: ' + data.combined.confidence + '%');
+      lines.push('الحالة: ' + data.combined.status);
+      lines.push('القرار: ' + data.combined.decision);
+      if(data.combined.decision === 'ادخل' && data.combined.entry > 0){
+        lines.push('الدخول: $' + data.combined.entry + ' | الوقف: $' + data.combined.stop);
+        lines.push('الهدف 1: $' + data.combined.target1 + ' | الهدف 2: $' + data.combined.target2);
+        lines.push('R/R: ' + data.combined.rr);
+      }
+
+      contentDiv.textContent = lines.join('\n');
+      showToast(sym + ' - اكتمل التحليل');
+    } else {
+      contentDiv.textContent = 'خطأ: ' + (data.error || 'حدث خطأ');
+    }
+  })
+  .catch(function(err){
+    loadingDiv.style.display = 'none';
+    contentDiv.textContent = 'خطأ في الاتصال';
+    console.error(err);
+  });
 }
 
 function sendCouncil(){
