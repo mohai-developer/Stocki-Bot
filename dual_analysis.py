@@ -185,13 +185,26 @@ def fetch_data(symbol):
 # ============================================================
 # FETCH NEWS
 # ============================================================
-def fetch_news(symbol, current_price=None):
+def fetch_news(symbol, current_price=None, timeout_sec=60):
+    """جلب الأخبار مع timeout محدد"""
+    import concurrent.futures
+    def _fetch():
+        try:
+            from news_bot import get_news, format_news_for_prompt
+            result = get_news(symbol, current_price)
+            return format_news_for_prompt(result)
+        except Exception as e:
+            print(f"news_bot error: {e}")
+            return "Could not fetch news"
+    
     try:
-        from news_bot import get_news, format_news_for_prompt
-        result = get_news(symbol, current_price)
-        return format_news_for_prompt(result)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(_fetch)
+            return future.result(timeout=timeout_sec)
+    except concurrent.futures.TimeoutError:
+        print(f"News fetch timeout for {symbol}")
+        return "News fetch timed out — analysis based on technical data only"
     except Exception as e:
-        print(f"news_bot error: {e}")
         return "Could not fetch news"
 
 # ============================================================
