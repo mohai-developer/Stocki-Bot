@@ -620,6 +620,88 @@ def dual():
         print(f"Dual analysis error: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/analyze_gpt", methods=["POST"])
+def analyze_gpt():
+    try:
+        body = request.json
+        symbol = body.get("symbol", "").upper()
+        report_type = body.get("report_type", "full")
+        entry_price = body.get("entry_price", "")
+        analysis_type = body.get("analysis_type", "general")
+
+        if not symbol:
+            return jsonify({"error": "Symbol required"}), 400
+
+        # جلب البيانات
+        data = get_latest_data(symbol)
+        current_price = data.get("close", None) if data else None
+        stock_news = get_stock_news(symbol, current_price)
+        market_news = get_market_news()
+        geo_news = get_geopolitical_news()
+
+        # بناء الـ prompt
+        if analysis_type == "position":
+            prompt = f"""أنت محلل مالي محترف متخصص في الأسهم الأمريكية وSwing Trading.
+المستخدم داخل صفقة في {symbol} بسعر دخول ${entry_price}.
+حلل وضعه بناءً على:
+البيانات الفنية: {data}
+أخبار السهم: {stock_news}
+أخبار السوق: {market_news}
+الأحداث الجيوسياسية: {geo_news}
+
+قدم تقريراً مختصراً:
+💼 سعر الدخول: ${entry_price}
+📈 السعر الحالي: $X
+📊 الربح/الخسارة: X%
+التوصية: ابقَ أو اخرج مع السبب والأسعار المقترحة
+✅ مستوى الثقة: X%"""
+        elif report_type == "summary":
+            prompt = f"""أنت محلل مالي محترف متخصص في الأسهم الأمريكية وSwing Trading.
+حلل السهم {symbol} بناءً على:
+البيانات الفنية: {data}
+أخبار السهم: {stock_news}
+أخبار السوق: {market_news}
+
+قدم ملخصاً مختصراً:
+📊 الوضع: إيجابي/سلبي/محايد
+🎯 التوصية: ادخل/انتظر/تجنب
+إذا الدخول: سعر الدخول، الهدف، الوقف، R/R
+✅ مستوى الثقة: X%"""
+        else:
+            prompt = f"""أنت محلل مالي محترف متخصص في الأسهم الأمريكية وSwing Trading.
+حلل السهم {symbol} بحرية كاملة — استخدم الأدوات والمنهجية التي تراها مناسبة.
+
+البيانات الفنية: {data}
+أخبار السهم: {stock_news}
+أخبار السوق: {market_news}
+الأحداث الجيوسياسية: {geo_news}
+
+قدم تحليلاً مفصلاً شاملاً مع القرار النهائي ونسبة الثقة والأسعار المقترحة."""
+
+        # استدعاء GPT
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
+            "Content-Type": "application/json"
+        }
+        body_gpt = {
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 2000
+        }
+        resp = requests.post(url, headers=headers, json=body_gpt, timeout=60)
+        data_gpt = resp.json()
+
+        if "choices" in data_gpt:
+            analysis = data_gpt["choices"][0]["message"]["content"]
+            return jsonify({"status": "success", "symbol": symbol, "analysis": analysis, "model": "G"})
+        else:
+            return jsonify({"error": str(data_gpt)}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"Server running on port {port}")
