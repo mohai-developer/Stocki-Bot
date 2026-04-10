@@ -218,30 +218,19 @@ def fetch_live_data(symbol):
 # ============================================================
 # FETCH NEWS
 # ============================================================
-def fetch_stock_news(symbol):
+def fetch_stock_news(symbol, current_price=None):
     try:
-        import xml.etree.ElementTree as ET
-        rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
-        resp = requests.get(rss_url, timeout=10)
-        root = ET.fromstring(resp.content)
-        
-        items = []
-        for item in root.findall(".//item")[:8]:
-            title = item.findtext("title", "")
-            source = item.findtext("source", "Yahoo Finance")
-            pub_date = item.findtext("pubDate", "")[:16] if item.findtext("pubDate") else ""
-            if title:
-                items.append(f"- {title} ({source}) {pub_date}")
-        
-        if items:
-            return "\n".join(items)
-        
-        # fallback
-        news = yf.Ticker(symbol).news
-        if not news:
-            return "No recent news"
-        return "\n".join([f"- {n.get('title','')} ({n.get('publisher','')})" for n in news[:5]])
-    except:
+        from news_bot import get_news, format_news_for_prompt
+        result = get_news(symbol, current_price)
+        return format_news_for_prompt(result)
+    except Exception as e:
+        print(f"news_bot error: {e}")
+        try:
+            news = yf.Ticker(symbol).news
+            if news:
+                return "\n".join([f"- {n.get('title','')} ({n.get('publisher','')})" for n in news[:5]])
+        except:
+            pass
         return "Could not fetch news"
 
 def fetch_macro_news():
