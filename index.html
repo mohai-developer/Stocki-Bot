@@ -232,7 +232,10 @@ input,button,select{font-family:'Segoe UI',sans-serif;outline:none}
           <input class="mini-input" id="entryPrice" placeholder="0.00" type="number" />
         </div>
 
-        <button class="btn-analyze" onclick="sendDual()" style="background:#238636">تحليل</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn-analyze" onclick="sendAnalysis('C')">تحليل C</button>
+          <button class="btn-analyze" onclick="sendAnalysis('G')" style="background:#6e40c9">تحليل G</button>
+        </div>
       </div>
 
       <div id="analysisResult" style="display:none;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1rem;margin-bottom:1.25rem">
@@ -1108,9 +1111,10 @@ function sendCouncil(){
 }
 
 
-function sendAnalysis(){
+function sendAnalysis(model){
   var sym = document.getElementById('analyzeSymbol').value.trim().toUpperCase();
   var entryPrice = document.getElementById('entryPrice') ? document.getElementById('entryPrice').value : '';
+  var mdl = model || 'C';
 
   if(!sym){ showToast(t('enterSymbol')); return; }
   if(analysisType === 'position' && !entryPrice){ showToast('أدخل سعر الدخول'); return; }
@@ -1124,10 +1128,12 @@ function sendAnalysis(){
   resultDiv.style.display = 'block';
   loadingDiv.style.display = 'block';
   contentDiv.textContent = '';
-  titleDiv.textContent = (analysisType === 'position' ? '💼 ' : '📊 ') + sym;
+  titleDiv.textContent = (mdl === 'G' ? 'نموذج G — ' : 'نموذج C — ') + sym;
   timeDiv.textContent = new Date().toLocaleTimeString();
 
-  fetch(API_URL + '/analyze', {
+  var endpoint = mdl === 'G' ? '/analyze_gpt' : '/analyze';
+
+  fetch(API_URL + endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1142,14 +1148,14 @@ function sendAnalysis(){
     loadingDiv.style.display = 'none';
     if(data.status === 'success'){
       contentDiv.textContent = data.analysis;
-      showToast('✅ ' + sym);
+      showToast('✅ ' + sym + ' — نموذج ' + mdl);
     } else {
       contentDiv.textContent = '❌ ' + (data.error || 'Error');
     }
   })
   .catch(function(err){
     loadingDiv.style.display = 'none';
-    contentDiv.textContent = '❌ Connection error';
+    contentDiv.textContent = '❌ خطأ في الاتصال';
     console.error(err);
   });
 }
