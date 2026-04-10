@@ -456,12 +456,15 @@ def run_dual_analysis(symbol, report_type="full"):
     print(f"جلب الأخبار...")
     news = fetch_news(symbol, data["close"])
 
-    print(f"Claude يحلل...")
-    claude_result = run_claude(symbol, data, news, report_type)
-    print(f"✅ Claude: {claude_result.get('decision')} ({claude_result.get('confidence')}%)")
+    print(f"Claude و GPT يحللان بالتوازي...")
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_claude = executor.submit(run_claude, symbol, data, news, report_type)
+        future_gpt    = executor.submit(run_gpt_analysis, symbol, data, news, report_type)
+        claude_result = future_claude.result(timeout=120)
+        gpt_result    = future_gpt.result(timeout=120)
 
-    print(f"GPT يحلل...")
-    gpt_result = run_gpt_analysis(symbol, data, news, report_type)
+    print(f"✅ Claude: {claude_result.get('decision')} ({claude_result.get('confidence')}%)")
     print(f"✅ GPT: {gpt_result.get('decision')} ({gpt_result.get('confidence')}%)")
 
     combined = combine_results(claude_result, gpt_result)
