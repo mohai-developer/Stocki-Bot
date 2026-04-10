@@ -20,53 +20,22 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 DATA_FILE = "market_data.csv"
 
-def get_stock_news(symbol):
+def get_stock_news(symbol, current_price=None):
     try:
-        news_items = []
-        
-        # المصدر الأول: NewsAPI بحث مخصص للسهم
-        if NEWS_API_KEY:
-            # جلب اسم الشركة الكامل للبحث الأدق
-            try:
-                company_name = yf.Ticker(symbol).info.get("longName", symbol)
-                short_name = yf.Ticker(symbol).info.get("shortName", symbol)
-                query = f"{symbol} OR {short_name}"
-            except:
-                query = f"{symbol} stock"
-            
-            url = "https://newsapi.org/v2/everything"
-            params = {
-                "apiKey": NEWS_API_KEY,
-                "q": query,
-                "language": "en",
-                "sortBy": "publishedAt",
-                "pageSize": 8,
-                "from": (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
-            }
-            resp = requests.get(url, params=params, timeout=10)
-            data = resp.json()
-            if data.get("status") == "ok":
-                for a in data.get("articles", [])[:8]:
-                    title = a.get("title", "")
-                    source = a.get("source", {}).get("name", "")
-                    published = a.get("publishedAt", "")[:10]
-                    if title and "[Removed]" not in title:
-                        news_items.append(f"- {title} ({source}) {published}")
-        
-        # المصدر الثاني: yfinance كاحتياط
-        if not news_items:
+        from news_bot import get_news, format_news_for_prompt
+        result = get_news(symbol, current_price)
+        return format_news_for_prompt(result)
+    except Exception as e:
+        print(f"news_bot error: {e}")
+        # fallback
+        try:
             ticker = yf.Ticker(symbol)
             news = ticker.news
             if news:
-                for item in news[:5]:
-                    title = item.get("title", "")
-                    publisher = item.get("publisher", "")
-                    if title:
-                        news_items.append(f"- {title} ({publisher})")
-        
-        return "\n".join(news_items) if news_items else "No recent news found"
-    except Exception as e:
-        return f"Could not fetch news: {e}"
+                return "\n".join([f"- {n.get('title','')} ({n.get('publisher','')})" for n in news[:5]])
+        except:
+            pass
+        return "Could not fetch news"
 
 def get_market_news():
     try:
@@ -363,7 +332,8 @@ def analyze():
         print(f"Analyzing {symbol} — type: {analysis_type}")
 
         data = get_latest_data(symbol)
-        stock_news = get_stock_news(symbol)
+        current_price = data.get("close", None) if data else None
+        stock_news = get_stock_news(symbol, current_price)
         market_news = get_market_news()
         geo_news = get_geopolitical_news()
 
