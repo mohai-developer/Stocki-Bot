@@ -553,6 +553,73 @@ def scanner():
         print(f"Scanner error: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/dual", methods=["POST"])
+def dual():
+    try:
+        body = request.json
+        symbol = body.get("symbol", "").upper()
+
+        if not symbol:
+            return jsonify({"error": "Symbol required"}), 400
+
+        import sys
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from dual_analysis import run_dual_analysis
+
+        result = run_dual_analysis(symbol)
+        if not result:
+            return jsonify({"error": f"Could not analyze {symbol}"}), 500
+
+        claude = result["claude"]
+        gpt    = result["gpt"]
+        combined = result["combined"]
+
+        return jsonify({
+            "status":  "success",
+            "symbol":  symbol,
+            "claude": {
+                "analysis":   claude.get("analysis", ""),
+                "decision":   claude.get("decision", ""),
+                "confidence": claude.get("confidence", 0),
+                "entry":      claude.get("entry", 0),
+                "stop":       claude.get("stop", 0),
+                "target1":    claude.get("target1", 0),
+                "target2":    claude.get("target2", 0),
+                "rr":         claude.get("rr", "N/A"),
+                "reasons":    claude.get("key_reasons", []),
+                "risks":      claude.get("risks", []),
+            },
+            "gpt": {
+                "analysis":   gpt.get("analysis", ""),
+                "decision":   gpt.get("decision", ""),
+                "confidence": gpt.get("confidence", 0),
+                "entry":      gpt.get("entry", 0),
+                "stop":       gpt.get("stop", 0),
+                "target1":    gpt.get("target1", 0),
+                "target2":    gpt.get("target2", 0),
+                "rr":         gpt.get("rr", "N/A"),
+                "reasons":    gpt.get("key_reasons", []),
+                "risks":      gpt.get("risks", []),
+            },
+            "combined": {
+                "decision":       combined["final_decision"],
+                "confidence":     combined["avg_confidence"],
+                "status":         combined["status"],
+                "entry":          combined["entry"],
+                "stop":           combined["stop"],
+                "target1":        combined["target1"],
+                "target2":        combined["target2"],
+                "rr":             combined["rr"],
+                "claude_conf":    combined["claude_confidence"],
+                "gpt_conf":       combined["gpt_confidence"],
+            }
+        })
+
+    except Exception as e:
+        print(f"Dual analysis error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"Server running on port {port}")
